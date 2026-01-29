@@ -231,15 +231,24 @@ $ selfheal logs --tail
 
 #### `selfheal version`
 
-Shows version and environment information:
+Shows version and environment information. This command works without a config file.
 
 ```bash
+# With valid config:
 $ selfheal version
 selfheal v1.0.0
 Node.js v20.10.0
 Agent: claude (Claude Code v1.2.3)
 Config: selfheal.yaml (valid)
+
+# Without config:
+$ selfheal version
+selfheal v1.0.0
+Node.js v20.10.0
+Config: not found
 ```
+
+If a config file exists but is invalid, show the validation errors.
 
 ---
 
@@ -387,7 +396,13 @@ const configSchema = z.object({
   }),
 
   logs: z.object({
-    sources: z.array(logSourceSchema).min(1),
+    sources: z.array(logSourceSchema).min(1).refine(
+      (sources) => {
+        const names = sources.map(s => s.name);
+        return names.length === new Set(names).size;
+      },
+      { message: 'Log source names must be unique' }
+    ),
     context_lines_before: z.number().int().min(0).default(10),
     context_lines_after: z.number().int().min(0).default(5),
     max_line_buffer: z.number().int().min(100).default(10000),
@@ -396,7 +411,12 @@ const configSchema = z.object({
   verification: z.object({
     test_commands: z.array(z.string()).default([]),
     test_command_timeout: durationSchema.default('5m'),
-    health_checks: z.array(z.string().url()).default([]),
+    health_checks: z.array(
+      z.string().url().refine(
+        (url) => url.startsWith('http://') || url.startsWith('https://'),
+        { message: 'Health check URL must use http:// or https://' }
+      )
+    ).default([]),
     health_check_timeout: durationSchema.default('10s'),
     wait_after_fix: durationSchema.default('5s'),
   }).default({}),
@@ -431,6 +451,7 @@ Configuration is validated using Zod on load. Validation includes:
 - Numeric values are positive integers where required
 - Paths are accessible (warning if not, will wait for creation)
 - Validate `project.root` resolves to an existing directory (error if not found)
+- Log source names are unique within the config
 
 ### Default Agent Configurations
 
@@ -538,8 +559,8 @@ The context file contains all necessary details including mode, error informatio
 
 Some agents (Gemini, Codex) write progress to stderr and final output to stdout. The `stderrIsProgress` flag controls how output is handled:
 
-- `stderrIsProgress: false` — stderr indicates problems, logged as warnings
-- `stderrIsProgress: true` — stderr is progress info, streamed to user in foreground mode
+- `stderrIsProgress: false` — stderr indicates problems; captured and logged as warnings
+- `stderrIsProgress: true` — stderr is progress info; streamed to terminal in foreground mode, captured but not logged as warnings (still available in `AgentResult.stderr` for debugging)
 
 ### Timeout and Retry Handling
 
@@ -1446,7 +1467,10 @@ Context files are cleaned based on age:
 
 The date prefix is the date the context file is created (not when the error was detected). For retries, a new context file is created with the current date and incremented attempt number. Old context files for the same error remain until cleaned by age.
 
-> **Size Limit:** Context files are limited to 256KB. If `raw_log` exceeds this, older context lines are trimmed with a note: `[...N lines truncated...]`
+> **Size Limit:** Context files are limited to 256KB. If the `raw_log` section exceeds this:
+> 1. Remove lines from the **beginning** of the raw log (oldest context first)
+> 2. Insert at the start: `[...{N} lines truncated due to size limit...]`
+> 3. Keep the error line and stack trace intact (trim only from context_lines_before)
 
 ---
 
@@ -1457,6 +1481,8 @@ After a fix is applied:
 1. **Wait**: Sleep for `wait_after_fix` duration (default: 5s)
 2. **Test commands**: Run each command in `test_commands` sequentially
    - Commands execute in a shell (`shell: true` in spawn options)
+   - On Windows, uses `cmd.exe`; on Unix, uses `/bin/sh`
+   - For cross-platform compatibility, use npm scripts or explicit shell commands
    - Working directory is the project root
    - Stop on first non-zero exit code
    - Capture stdout/stderr for logging
@@ -1546,7 +1572,21 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 ```
 
-For v1: Single schema version (1). On version mismatch, log error and exit with instructions.
+For v1: Single schema version (1). On version mismatch, exit with code 4 and the following message:
+
+```
+Error: Database schema version mismatch.
+  Expected: 1
+  Found: {actual_version}
+
+This database was created by a different version of selfheal.
+To resolve:
+  1. Back up .selfheal/errors.db
+  2. Delete .selfheal/errors.db
+  3. Restart selfheal (a new database will be created)
+
+Note: This will clear error history. Alternatively, downgrade/upgrade selfheal to match the database version.
+```
 
 Future versions will implement proper migrations.
 
