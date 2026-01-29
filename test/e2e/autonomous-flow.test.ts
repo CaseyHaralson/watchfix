@@ -4,7 +4,6 @@ import { spawn, spawnSync } from 'node:child_process';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { Database } from '../../src/db/index.js';
-import { getError } from '../../src/db/queries.js';
 import {
   createTempDir,
   readFixture,

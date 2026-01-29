@@ -39,12 +39,7 @@ export class FixQueue {
 
     this.processingPromise = (async () => {
       try {
-        while (true) {
-          const next = this.getNext();
-          if (!next) {
-            break;
-          }
-
+        for (let next = this.getNext(); next; next = this.getNext()) {
           this.fixInProgress = true;
           try {
             await this.onProcess?.(next);

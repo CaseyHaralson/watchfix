@@ -42,7 +42,12 @@ export class FileSource implements LogSource {
     const exists = fs.existsSync(this.filePath);
     if (exists) {
       const stats = fs.statSync(this.filePath);
-      this.position = stats.size;
+      const now = Date.now();
+      const RECENT_WINDOW_MS = 1000;
+      const STARTUP_READ_MAX_BYTES = 64 * 1024;
+      const recentWrite = now - stats.mtimeMs <= RECENT_WINDOW_MS;
+      const readFromStart = stats.size > 0 && stats.size <= STARTUP_READ_MAX_BYTES && recentWrite;
+      this.position = readFromStart ? 0 : stats.size;
       this.lastMtimeMs = stats.mtimeMs;
       this.lastInode = typeof stats.ino === 'number' ? stats.ino : null;
     } else {
