@@ -74,6 +74,16 @@ selfheal monitors application logs, detects errors using pattern matching, and d
 | `--quiet`, `-q` | Suppress non-essential output |
 | `--help`, `-h` | Show help for command |
 
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | General error (config invalid, agent failed, etc.) |
+| 2 | Watcher state conflict (already running / not running) |
+| 3 | Target not actionable (error not found, wrong status, locked) |
+| 130 | Interrupted by user (SIGINT) |
+
 ### Command Details
 
 #### `selfheal init`
@@ -224,6 +234,10 @@ Config: selfheal.yaml (valid)
 ---
 
 ## Configuration
+
+### Path Resolution
+
+All relative paths in `selfheal.yaml` are resolved relative to the directory containing the config file. When using `--config` to specify an alternate location, paths are still relative to that config file's directory, not the current working directory.
 
 ### Duration Strings
 
@@ -430,6 +444,8 @@ const AGENT_CONFIG_DEFAULTS = {
 ```
 
 If `command` or `args` are specified in config, they override the defaults entirely (not merged).
+
+**Note:** These defaults reflect CLI invocations at time of specification. If an agent CLI changes its argument handling, override `command` and `args` in the config file.
 
 ---
 
@@ -662,6 +678,22 @@ async function processAgentResult(
       data: null,
       diagnostic: `Failed to parse output: ${err.message}\nRaw content:\n${rawContent}`,
     };
+  }
+}
+
+// After successful analysis, transition status and store result
+async function handleAnalysisSuccess(
+  errorId: number,
+  lockId: string,
+  analysisData: AnalysisOutput
+): Promise<void> {
+  const success = await transitionStatus(errorId, 'analyzing', 'suggested', lockId);
+  if (success) {
+    db.run(
+      'UPDATE errors SET suggestion = ?, updated_at = ? WHERE id = ?',
+      [JSON.stringify(analysisData), new Date().toISOString(), errorId]
+    );
+    logActivity('analysis_complete', errorId, { confidence: analysisData.confidence });
   }
 }
 ```
@@ -1389,6 +1421,8 @@ After a fix is applied:
 
 1. **Wait**: Sleep for `wait_after_fix` duration (default: 5s)
 2. **Test commands**: Run each command in `test_commands` sequentially
+   - Commands execute in a shell (`shell: true` in spawn options)
+   - Working directory is the project root
    - Stop on first non-zero exit code
    - Capture stdout/stderr for logging
    - Timeout: `test_command_timeout` per command (default: 5m)
@@ -1968,11 +2002,11 @@ async function showStatus(): Promise<void> {
   // Show error summary
   const counts = db.get(`
     SELECT
-      COUNT(*) FILTER (WHERE status = 'pending') as pending,
-      COUNT(*) FILTER (WHERE status = 'suggested') as suggested,
-      COUNT(*) FILTER (WHERE status IN ('analyzing', 'fixing')) as in_progress,
-      COUNT(*) FILTER (WHERE status = 'fixed' AND date(updated_at) = date('now')) as fixed_today,
-      COUNT(*) FILTER (WHERE status = 'failed') as failed
+      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+      SUM(CASE WHEN status = 'suggested' THEN 1 ELSE 0 END) as suggested,
+      SUM(CASE WHEN status IN ('analyzing', 'fixing') THEN 1 ELSE 0 END) as in_progress,
+      SUM(CASE WHEN status = 'fixed' AND date(updated_at) = date('now') THEN 1 ELSE 0 END) as fixed_today,
+      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
     FROM errors
   `);
   
@@ -2302,6 +2336,11 @@ class InternalError extends Error {
   }
 }
 ```
+
+### Missing Configuration
+
+When any command except `init` is run without a `selfheal.yaml`:
+- Exit with code 1 and message: `"No selfheal.yaml found in current directory. Run 'selfheal init' to create one."`
 
 ### User-Facing Error Messages
 
