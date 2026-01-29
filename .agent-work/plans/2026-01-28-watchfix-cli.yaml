@@ -431,7 +431,7 @@ steps:
 
   - id: "3.2"
     description: "Create database schema and migrations"
-    status: "pending"
+    status: "complete"
     deps:
       - "3.1"
     parallel: false
@@ -459,6 +459,7 @@ steps:
     context_files:
       - src/db/index.ts
       - spec/sections/database-schema.md
+    agent: codex
 
   - id: "3.3"
     description: "Create typed query functions for errors"
