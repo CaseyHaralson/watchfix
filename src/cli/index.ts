@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import { createRequire } from 'node:module';
 
+import { initCommand } from './commands/init.js';
 import { EXIT_CODES, InternalError, UserError } from '../utils/errors.js';
 
 const require = createRequire(import.meta.url);
@@ -26,7 +27,9 @@ const registerCommands = (program: Command): void => {
       .description('Create watchfix.yaml in current directory')
       .option('--agent <provider>', 'Set initial agent provider (claude, gemini, codex)')
       .option('--force', 'Overwrite existing watchfix.yaml')
-      .action(notImplemented('init'))
+      .action(async (options) => {
+        await initCommand(options);
+      })
   );
 
   addGlobalOptions(

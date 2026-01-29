@@ -1159,7 +1159,7 @@ steps:
 
   - id: "11.2"
     description: "Create init command"
-    status: "pending"
+    status: "complete"
     deps:
       - "11.1"
     parallel: false
@@ -1181,6 +1181,7 @@ steps:
       - .gitignore updated correctly
     files:
       - src/cli/commands/init.ts
+    agent: codex
 
   - id: "11.3"
     description: "Create watch command"
