@@ -1185,7 +1185,7 @@ steps:
 
   - id: "11.3"
     description: "Create watch command"
-    status: "pending"
+    status: "complete"
     deps:
       - "11.1"
       - "5.5"
@@ -1238,6 +1238,7 @@ steps:
       env var. If user manually passes --daemon-child without env var, exit
       with error. Test the parent-child handoff carefully on both Unix and
       Windows (Windows should reject --daemon early).
+    agent: codex
 
   - id: "11.4"
     description: "Create stop command"

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { createRequire } from 'node:module';
 
 import { initCommand } from './commands/init.js';
+import { watchCommand } from './commands/watch.js';
 import { EXIT_CODES, InternalError, UserError } from '../utils/errors.js';
 
 const require = createRequire(import.meta.url);
@@ -38,7 +39,10 @@ const registerCommands = (program: Command): void => {
       .description('Watch logs in foreground or background')
       .option('--daemon', 'Watch logs in background (Linux/macOS only)')
       .option('--autonomous', 'Auto-fix errors without approval')
-      .action(notImplemented('watch'))
+      .addOption(new Option('--daemon-child', 'Internal daemon flag').hideHelp())
+      .action(async (options) => {
+        await watchCommand(options);
+      })
   );
 
   addGlobalOptions(

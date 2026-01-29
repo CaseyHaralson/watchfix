@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import type { Database } from '../db/index.js';
 import { logActivity } from '../db/queries.js';
 import { LOCK_TIMEOUT_MS } from '../fixer/lock.js';
-import { InternalError, UserError } from './errors.js';
+import { EXIT_CODES, InternalError, UserError } from './errors.js';
 import type { Logger } from './logger.js';
 
 const SHUTDOWN_TIMEOUT_MS = 30_000;
@@ -163,7 +163,9 @@ export function setupSignalHandlers(
     }
 
     logInfo('Shutdown complete');
-    process.exit(0);
+    const exitCode =
+      signal === 'SIGINT' ? EXIT_CODES.INTERRUPTED : EXIT_CODES.SUCCESS;
+    process.exit(exitCode);
   };
 
   process.on('SIGTERM', () => {
