@@ -3,6 +3,7 @@ import { Command, Option } from 'commander';
 import { createRequire } from 'node:module';
 
 import { initCommand } from './commands/init.js';
+import { stopCommand } from './commands/stop.js';
 import { watchCommand } from './commands/watch.js';
 import { EXIT_CODES, InternalError, UserError } from '../utils/errors.js';
 
@@ -49,7 +50,9 @@ const registerCommands = (program: Command): void => {
     program
       .command('stop')
       .description('Stop background watcher')
-      .action(notImplemented('stop'))
+      .action(async (options) => {
+        await stopCommand(options);
+      })
   );
 
   addGlobalOptions(

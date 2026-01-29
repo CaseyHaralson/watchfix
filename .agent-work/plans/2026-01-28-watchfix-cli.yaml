@@ -1242,7 +1242,7 @@ steps:
 
   - id: "11.4"
     description: "Create stop command"
-    status: "pending"
+    status: "complete"
     deps:
       - "11.1"
       - "10.1"
@@ -1265,6 +1265,7 @@ steps:
       - src/cli/commands/stop.ts
     context_files:
       - src/utils/daemon.ts
+    agent: codex
 
   - id: "11.5"
     description: "Create status command"

@@ -1,0 +1,24 @@
+step_id: "11.4"
+agent: codex
+outcome: success
+details: Handled ESRCH races in stop command by treating missing watcher
+  processes as stale state and clearing watcher_state for SIGTERM/SIGKILL paths.
+timestamp: 2026-01-29T06:04:12.706Z
+artifacts:
+  - src/cli/commands/stop.ts
+blocked_reason: null
+test_results: "npm test: 73 passed, 2 skipped; npm run lint: passed"
+reviews:
+  - iteration: 1
+    approved: false
+    feedback:
+      - severity: blocking
+        file: src/cli/commands/stop.ts
+        line: 98
+        comment: If the watcher exits between isOurProcess() and process.kill(),
+          process.kill will throw ESRCH. The command should treat that as stale
+          state (clear watcher_state, report not running) instead of failing
+          with UserError. Handle ESRCH (for SIGTERM and SIGKILL) explicitly.
+  - iteration: 2
+    approved: true
+    feedback: []
