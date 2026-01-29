@@ -1028,7 +1028,7 @@ steps:
 
   - id: "9.2"
     description: "Create fix orchestrator"
-    status: "pending"
+    status: "complete"
     deps:
       - "9.1"
       - "6.3"
@@ -1078,6 +1078,7 @@ steps:
       The fix orchestrator is the most complex component, coordinating agents,
       locking, status transitions, and verification. Thorough testing with
       mock agents is essential.
+    agent: codex
 
   # ============================================================================
   # Phase 10: Daemon Management
