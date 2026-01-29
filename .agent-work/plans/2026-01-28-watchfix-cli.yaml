@@ -572,7 +572,7 @@ steps:
 
   - id: "4.2"
     description: "Create multi-line parser with stack trace handling"
-    status: "pending"
+    status: "complete"
     deps:
       - "4.1"
       - "1.2"
@@ -618,6 +618,7 @@ steps:
       The 100ms timeout requires careful async handling. The context window
       logic must correctly distinguish between "after error line" and
       "after stack trace ends" - test with multi-line and single-line errors.
+    agent: codex
 
   # ============================================================================
   # Phase 5: Log Source Watchers
