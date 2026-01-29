@@ -711,7 +711,7 @@ steps:
 
   - id: "5.4"
     description: "Create command log source"
-    status: "pending"
+    status: "complete"
     deps:
       - "5.1"
       - "1.2"
@@ -741,6 +741,7 @@ steps:
       - src/utils/logger.ts
       - src/utils/process.ts
       - src/utils/duration.ts
+    agent: codex
 
   - id: "5.5"
     description: "Create watcher orchestrator with event queue"
