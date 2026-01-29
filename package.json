@@ -1,0 +1,32 @@
+{
+  "name": "watchfix",
+  "version": "0.1.0",
+  "description": "CLI tool that watches logs, detects errors, and dispatches AI agents to fix them",
+  "type": "module",
+  "bin": {
+    "watchfix": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "format": "prettier -w ."
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "chokidar": "^3.6.0",
+    "commander": "^12.1.0",
+    "yaml": "^2.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.9",
+    "@types/node": "^20.11.30",
+    "@typescript-eslint/eslint-plugin": "^7.7.1",
+    "@typescript-eslint/parser": "^7.7.1",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5",
+    "vitest": "^1.5.0"
+  }
+}
