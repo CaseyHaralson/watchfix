@@ -1003,7 +1003,7 @@ steps:
 
   - id: "9.1"
     description: "Create fix queue manager"
-    status: "pending"
+    status: "complete"
     deps:
       - "3.4"
     parallel: false
@@ -1024,6 +1024,7 @@ steps:
       - src/fixer/queue.ts
     context_files:
       - src/fixer/lock.ts
+    agent: codex
 
   - id: "9.2"
     description: "Create fix orchestrator"
