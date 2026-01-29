@@ -5,7 +5,7 @@ metadata:
   created_at: "2026-01-28T00:00:00Z"
   created_by: "Discovery-Agent"
   version: "1.1"
-  source_idea: "Build selfheal v8 from specification - a CLI tool that watches
+  source_idea: "Build selfheal from specification - a CLI tool that watches
     logs, detects errors, and dispatches AI agents to fix them"
   outcomes:
     - Users can configure selfheal via YAML to watch log sources (file, docker,
@@ -306,10 +306,12 @@ steps:
       - "1.6"
     parallel: false
     context: |
-      The configuration is validated using Zod. This includes the full schema
-      from the spec with duration strings, log sources (file/docker/command),
-      agent settings, verification config, etc. Uses UserError for validation
-      errors to provide clear user-facing messages.
+      The configuration is validated using Zod. This includes duration strings,
+      log sources (file/docker/command), agent settings, verification config, etc.
+      Uses UserError for validation errors to provide clear user-facing messages.
+
+      See spec/sections/config-schema.md for the complete YAML schema and Zod
+      implementation.
     requirements:
       - Create src/config/schema.ts
       - Define durationSchema with regex validation and max 24h limit
@@ -329,6 +331,7 @@ steps:
     context_files:
       - src/utils/duration.ts
       - src/utils/errors.ts
+      - spec/sections/config-schema.md
 
   - id: "2.2"
     description: "Create configuration loader"
@@ -790,6 +793,8 @@ steps:
       - All fields from spec present
     files:
       - src/agents/types.ts
+    context_files:
+      - spec/sections/agent-defaults.md
 
   - id: "6.2"
     description: "Create base agent with spawn/timeout/retry logic"
