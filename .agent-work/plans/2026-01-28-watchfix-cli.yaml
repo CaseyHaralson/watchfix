@@ -346,7 +346,7 @@ steps:
 
   - id: "2.2"
     description: "Create configuration loader"
-    status: "pending"
+    status: "complete"
     deps:
       - "2.1"
     parallel: false
@@ -370,6 +370,7 @@ steps:
     context_files:
       - src/config/schema.ts
       - src/utils/errors.ts
+    agent: codex
 
   - id: "2.3"
     description: "Create agent defaults configuration"
