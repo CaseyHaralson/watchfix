@@ -36,6 +36,12 @@ export type WatcherSourceErrorEvent = {
 
 type WatcherEventName = 'error_detected' | 'error_deduplicated' | 'source_error';
 
+type WatcherEventPayloads = {
+  error_detected: WatcherDetectedEvent;
+  error_deduplicated: WatcherDeduplicatedEvent;
+  source_error: WatcherSourceErrorEvent;
+};
+
 const ACTIVE_STATUSES = new Set<ErrorStatus>([
   'pending',
   'analyzing',
@@ -139,13 +145,10 @@ export class WatcherOrchestrator {
     this.createSources(config.logs.sources);
   }
 
-  on(event: 'error_detected', handler: (payload: WatcherDetectedEvent) => void): void;
-  on(
-    event: 'error_deduplicated',
-    handler: (payload: WatcherDeduplicatedEvent) => void
-  ): void;
-  on(event: 'source_error', handler: (payload: WatcherSourceErrorEvent) => void): void;
-  on(event: WatcherEventName, handler: (payload: unknown) => void): void {
+  on<T extends WatcherEventName>(
+    event: T,
+    handler: (payload: WatcherEventPayloads[T]) => void
+  ): void {
     this.emitter.on(event, handler);
   }
 

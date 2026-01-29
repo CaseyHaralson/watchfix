@@ -823,7 +823,7 @@ steps:
 
   - id: "6.2"
     description: "Create base agent with spawn/timeout/retry logic"
-    status: "pending"
+    status: "complete"
     deps:
       - "6.1"
       - "1.5"
@@ -854,6 +854,7 @@ steps:
       - src/utils/process.ts
       - src/utils/logger.ts
       - src/agents/defaults.ts
+    agent: codex
 
   - id: "6.3"
     description: "Create agent factory and provider-specific handlers"
