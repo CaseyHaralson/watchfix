@@ -12,6 +12,7 @@ import { ignoreCommand } from './commands/ignore.js';
 import { logsCommand } from './commands/logs.js';
 import { configValidateCommand } from './commands/config.js';
 import { cleanCommand } from './commands/clean.js';
+import { versionCommand } from './commands/version.js';
 import { EXIT_CODES, InternalError, UserError } from '../utils/errors.js';
 
 const require = createRequire(import.meta.url);
@@ -140,8 +141,8 @@ const registerCommands = (program: Command): void => {
     program
       .command('version')
       .description('Show version information')
-      .action(() => {
-        process.stdout.write(`${pkg.name ?? 'watchfix'} ${pkg.version ?? '0.0.0'}\n`);
+      .action(async (options) => {
+        await versionCommand(options);
       })
   );
 };

@@ -1464,7 +1464,7 @@ steps:
 
   - id: "11.12"
     description: "Create version command"
-    status: "pending"
+    status: "complete"
     deps:
       - "11.1"
     parallel: false
@@ -1482,6 +1482,7 @@ steps:
       - Shows config validation status
     files:
       - src/cli/commands/version.ts
+    agent: codex
 
   # ============================================================================
   # Phase 12: Testing
