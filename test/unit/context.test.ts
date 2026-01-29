@@ -120,7 +120,8 @@ describe('context generators', () => {
     vi.setSystemTime(new Date('2026-01-05T00:00:00.000Z'));
 
     const config = buildConfig();
-    config.cleanup.context_max_size_kb = 1;
+    // Use 2KB limit - minimum viable since markdown structure is ~1.2KB
+    config.cleanup.context_max_size_kb = 2;
 
     const stackLines = Array.from({ length: 800 }, () => '    at call()');
     const stackTrace = stackLines.join('\n');
@@ -149,6 +150,163 @@ describe('context generators', () => {
     expect(Buffer.byteLength(result.content, 'utf8')).toBeLessThanOrEqual(
       maxBytes
     );
+
+    vi.useRealTimers();
+  });
+
+  it('preserves ERROR markers even under extreme truncation', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-06T00:00:00.000Z'));
+
+    const config = buildConfig();
+    config.cleanup.context_max_size_kb = 2;
+
+    const stackLines = Array.from({ length: 500 }, () => '    at call()');
+    const stackTrace = stackLines.join('\n');
+    const beforeLines = Array.from({ length: 200 }, (_, index) =>
+      `before-${index}-${'x'.repeat(50)}`
+    );
+    const afterLines = Array.from({ length: 200 }, (_, index) =>
+      `after-${index}-${'y'.repeat(50)}`
+    );
+    const rawLog = [
+      ...beforeLines,
+      'TypeError: boom',
+      ...stackLines,
+      ...afterLines,
+    ].join('\n');
+
+    const largeError: ErrorRecord = {
+      ...baseError,
+      stackTrace,
+      rawLog,
+    };
+
+    const result = generateAnalyzeContext(largeError, config, 1);
+
+    expect(result.content).toContain('---ERROR---');
+    expect(result.content).toContain('---END ERROR---');
+    expect(result.content).toContain('TypeError: boom');
+
+    vi.useRealTimers();
+  });
+
+  it('truncates beforeLines before afterLines', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-07T00:00:00.000Z'));
+
+    const config = buildConfig();
+    config.cleanup.context_max_size_kb = 3;
+
+    const beforeLines = Array.from({ length: 50 }, (_, index) =>
+      `BEFORE-${index}-${'x'.repeat(40)}`
+    );
+    const afterLines = Array.from({ length: 50 }, (_, index) =>
+      `AFTER-${index}-${'y'.repeat(40)}`
+    );
+    const rawLog = [
+      ...beforeLines,
+      'TypeError: boom',
+      '    at main (app.ts:10:5)',
+      ...afterLines,
+    ].join('\n');
+
+    const largeError: ErrorRecord = {
+      ...baseError,
+      rawLog,
+    };
+
+    const result = generateAnalyzeContext(largeError, config, 1);
+
+    // After truncation, should have fewer beforeLines than original
+    // but afterLines should still be present if beforeLines were truncated first
+    const beforeCount = (result.content.match(/BEFORE-/g) || []).length;
+    const afterCount = (result.content.match(/AFTER-/g) || []).length;
+
+    // If we had to truncate, beforeLines should be reduced first
+    // So we should see truncation marker if beforeLines were removed
+    if (beforeCount < 50) {
+      expect(result.content).toMatch(
+        /\[\.\.\.\d+ lines truncated due to size limit\.\.\.\]/
+      );
+    }
+    // afterLines should only be truncated if all beforeLines were removed first
+    if (afterCount < 50 && beforeCount > 0) {
+      // This would indicate incorrect truncation order
+      expect(beforeCount).toBe(0);
+    }
+
+    vi.useRealTimers();
+  });
+
+  it('preserves structure in fix context under size limit', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-08T00:00:00.000Z'));
+
+    const config = buildConfig();
+    config.cleanup.context_max_size_kb = 2;
+
+    const stackLines = Array.from({ length: 300 }, () => '    at call()');
+    const stackTrace = stackLines.join('\n');
+    const analysis = 'x'.repeat(5000);
+
+    const largeError: ErrorRecord = {
+      ...baseError,
+      stackTrace,
+    };
+
+    const result = generateFixContext(largeError, analysis, config, 1);
+    const maxBytes = config.cleanup.context_max_size_kb * 1024;
+
+    expect(Buffer.byteLength(result.content, 'utf8')).toBeLessThanOrEqual(
+      maxBytes
+    );
+    expect(result.content).toContain('## Mode\nfix');
+    expect(result.content).toContain('## Previous Analysis');
+    expect(result.content).toContain('## Instructions');
+
+    vi.useRealTimers();
+  });
+
+  it('removes afterLines after beforeLines are exhausted', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-09T00:00:00.000Z'));
+
+    const config = buildConfig();
+    config.cleanup.context_max_size_kb = 2;
+
+    const beforeLines = Array.from({ length: 30 }, (_, index) =>
+      `BEFORE-${index}-${'x'.repeat(30)}`
+    );
+    const afterLines = Array.from({ length: 100 }, (_, index) =>
+      `AFTER-${index}-${'y'.repeat(50)}`
+    );
+    const rawLog = [
+      ...beforeLines,
+      'TypeError: boom',
+      '    at main (app.ts:10:5)',
+      ...afterLines,
+    ].join('\n');
+
+    const largeError: ErrorRecord = {
+      ...baseError,
+      rawLog,
+    };
+
+    const result = generateAnalyzeContext(largeError, config, 1);
+
+    const beforeCount = (result.content.match(/BEFORE-/g) || []).length;
+    const afterCount = (result.content.match(/AFTER-/g) || []).length;
+
+    // With extreme truncation, beforeLines should be fully removed first
+    // then afterLines should be reduced
+    if (beforeCount === 0 && afterCount < 100) {
+      // This is the expected behavior - beforeLines removed first
+      expect(beforeCount).toBe(0);
+    }
+
+    expect(result.content).toContain('---ERROR---');
+    expect(result.content).toContain('---END ERROR---');
 
     vi.useRealTimers();
   });

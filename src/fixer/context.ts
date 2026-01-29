@@ -282,28 +282,63 @@ const ensureSizeLimit = (options: {
   maxBytes: number;
   beforeLines: string[];
   afterLines: string[];
-  render: (before: string[], after: string[], truncated: number) => string;
+  stackTrace: string;
+  render: (before: string[], after: string[], stack: string, truncated: number) => string;
 }): {
   content: string;
   truncatedLines: number;
   beforeLines: string[];
   afterLines: string[];
+  stackTrace: string;
 } => {
   let truncatedLines = 0;
-  let beforeLines = options.beforeLines;
-  const afterLines = options.afterLines;
-  let content = options.render(beforeLines, afterLines, truncatedLines);
+  let beforeLines = [...options.beforeLines];
+  let afterLines = [...options.afterLines];
+  let stackTrace = options.stackTrace;
+  let content = options.render(beforeLines, afterLines, stackTrace, truncatedLines);
 
+  // Phase 1: Remove beforeLines (oldest context first)
   while (
     Buffer.byteLength(content, 'utf8') > options.maxBytes &&
     beforeLines.length > 0
   ) {
     beforeLines = beforeLines.slice(1);
     truncatedLines += 1;
-    content = options.render(beforeLines, afterLines, truncatedLines);
+    content = options.render(beforeLines, afterLines, stackTrace, truncatedLines);
   }
 
-  return { content, truncatedLines, beforeLines, afterLines };
+  // Phase 2: Remove afterLines (if still over limit)
+  while (
+    Buffer.byteLength(content, 'utf8') > options.maxBytes &&
+    afterLines.length > 0
+  ) {
+    afterLines = afterLines.slice(0, -1);
+    content = options.render(beforeLines, afterLines, stackTrace, truncatedLines);
+  }
+
+  // Phase 3: Further truncate stack trace using binary search (if still over)
+  if (Buffer.byteLength(content, 'utf8') > options.maxBytes && stackTrace) {
+    let low = 0;
+    let high = Buffer.byteLength(stackTrace, 'utf8');
+    let best = '';
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const candidate = truncateStackTraceToBytes(stackTrace, mid);
+      const candidateContent = options.render(beforeLines, afterLines, candidate, truncatedLines);
+      if (Buffer.byteLength(candidateContent, 'utf8') <= options.maxBytes) {
+        best = candidate;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    stackTrace = best;
+    content = options.render(beforeLines, afterLines, stackTrace, truncatedLines);
+  }
+
+  return { content, truncatedLines, beforeLines, afterLines, stackTrace };
 };
 
 export const generateAnalyzeContext = (
@@ -345,21 +380,66 @@ export const generateAnalyzeContext = (
     });
   };
 
-  let stackTrace = truncateStackTrace(error.stackTrace ?? '');
-  const render = (beforeLines: string[], afterLines: string[], truncated: number) =>
-    buildContent(stackTrace, beforeLines, afterLines, truncated);
+  const stackTrace = truncateStackTrace(error.stackTrace ?? '');
+  const render = (
+    beforeLines: string[],
+    afterLines: string[],
+    stackTraceValue: string,
+    truncated: number
+  ) => buildContent(stackTraceValue, beforeLines, afterLines, truncated);
 
-  const { content: initialContent, truncatedLines, beforeLines, afterLines } = ensureSizeLimit({
+  const { content } = ensureSizeLimit({
     maxBytes,
     beforeLines: before,
     afterLines: after,
+    stackTrace,
     render,
   });
 
-  let content = initialContent;
-  if (Buffer.byteLength(content, 'utf8') > maxBytes && stackTrace) {
-    const baseRender = (stackTraceValue: string) =>
-      buildContent(stackTraceValue, beforeLines, afterLines, truncatedLines);
+  return {
+    path: contextPath,
+    content: sanitizeUtf8(content),
+  };
+};
+
+const ensureFixSizeLimit = (options: {
+  maxBytes: number;
+  analysis: string;
+  stackTrace: string;
+  render: (analysis: string, stack: string) => string;
+}): {
+  content: string;
+  analysis: string;
+  stackTrace: string;
+} => {
+  let analysis = options.analysis;
+  let stackTrace = options.stackTrace;
+  let content = options.render(analysis, stackTrace);
+
+  // Phase 1: Truncate analysis content (from end, preserving summary)
+  if (Buffer.byteLength(content, 'utf8') > options.maxBytes && analysis) {
+    let low = 0;
+    let high = Buffer.byteLength(analysis, 'utf8');
+    let best = '';
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const candidate = sliceUtf8ByBytes(analysis, mid, 'start');
+      const candidateContent = options.render(candidate, stackTrace);
+      if (Buffer.byteLength(candidateContent, 'utf8') <= options.maxBytes) {
+        best = candidate;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    analysis = best;
+    content = options.render(analysis, stackTrace);
+  }
+
+  // Phase 2: Further truncate stack trace using binary search (if still over)
+  if (Buffer.byteLength(content, 'utf8') > options.maxBytes && stackTrace) {
     let low = 0;
     let high = Buffer.byteLength(stackTrace, 'utf8');
     let best = '';
@@ -367,8 +447,8 @@ export const generateAnalyzeContext = (
     while (low <= high) {
       const mid = Math.floor((low + high) / 2);
       const candidate = truncateStackTraceToBytes(stackTrace, mid);
-      const candidateContent = baseRender(candidate);
-      if (Buffer.byteLength(candidateContent, 'utf8') <= maxBytes) {
+      const candidateContent = options.render(analysis, candidate);
+      if (Buffer.byteLength(candidateContent, 'utf8') <= options.maxBytes) {
         best = candidate;
         low = mid + 1;
       } else {
@@ -377,17 +457,10 @@ export const generateAnalyzeContext = (
     }
 
     stackTrace = best;
-    content = baseRender(stackTrace);
+    content = options.render(analysis, stackTrace);
   }
 
-  if (Buffer.byteLength(content, 'utf8') > maxBytes) {
-    content = sliceUtf8ByBytes(content, maxBytes, 'start');
-  }
-
-  return {
-    path: contextPath,
-    content: sanitizeUtf8(content),
-  };
+  return { content, analysis, stackTrace };
 };
 
 export const generateFixContext = (
@@ -402,10 +475,9 @@ export const generateFixContext = (
     `${date}-error-${error.id}-attempt-${attempt}-fix.md`
   );
   const maxBytes = config.cleanup.context_max_size_kb * 1024;
-  let stackTrace = truncateStackTrace(error.stackTrace ?? '');
-  let analysisContent = analysis;
+  const stackTrace = truncateStackTrace(error.stackTrace ?? '');
 
-  const buildContent = (stackTraceValue: string, analysisValue: string): string =>
+  const render = (analysisValue: string, stackTraceValue: string): string =>
     buildFixContent({
       projectName: config.project.name,
       projectRoot: resolveProjectRoot(config),
@@ -416,57 +488,12 @@ export const generateFixContext = (
       analysis: analysisValue,
     });
 
-  let content = buildContent(stackTrace, analysisContent);
-
-  if (Buffer.byteLength(content, 'utf8') > maxBytes) {
-    const baseRender = (analysisValue: string) =>
-      buildContent(stackTrace, analysisValue);
-    let low = 0;
-    let high = Buffer.byteLength(analysisContent, 'utf8');
-    let best = '';
-
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-      const candidate = sliceUtf8ByBytes(analysisContent, mid, 'start');
-      const candidateContent = baseRender(candidate);
-      if (Buffer.byteLength(candidateContent, 'utf8') <= maxBytes) {
-        best = candidate;
-        low = mid + 1;
-      } else {
-        high = mid - 1;
-      }
-    }
-
-    analysisContent = best;
-    content = baseRender(analysisContent);
-  }
-
-  if (Buffer.byteLength(content, 'utf8') > maxBytes && stackTrace) {
-    const baseRender = (stackTraceValue: string) =>
-      buildContent(stackTraceValue, analysisContent);
-    let low = 0;
-    let high = Buffer.byteLength(stackTrace, 'utf8');
-    let best = '';
-
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-      const candidate = truncateStackTraceToBytes(stackTrace, mid);
-      const candidateContent = baseRender(candidate);
-      if (Buffer.byteLength(candidateContent, 'utf8') <= maxBytes) {
-        best = candidate;
-        low = mid + 1;
-      } else {
-        high = mid - 1;
-      }
-    }
-
-    stackTrace = best;
-    content = baseRender(stackTrace);
-  }
-
-  if (Buffer.byteLength(content, 'utf8') > maxBytes) {
-    content = sliceUtf8ByBytes(content, maxBytes, 'start');
-  }
+  const { content } = ensureFixSizeLimit({
+    maxBytes,
+    analysis,
+    stackTrace,
+    render,
+  });
 
   return {
     path: contextPath,
