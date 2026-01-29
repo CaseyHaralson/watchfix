@@ -1519,7 +1519,7 @@ steps:
 
   - id: "12.2"
     description: "Create integration tests for database"
-    status: "pending"
+    status: "complete"
     deps:
       - "3.3"
       - "12.1"
@@ -1542,6 +1542,7 @@ steps:
       - src/db/index.ts
       - src/db/queries.ts
       - test/helpers/test-utils.ts
+    agent: codex
 
   - id: "12.3"
     description: "Create E2E tests for manual flow"
