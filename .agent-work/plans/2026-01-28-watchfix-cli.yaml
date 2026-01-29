@@ -115,7 +115,7 @@ steps:
 
   - id: "1.1"
     description: "Create duration parsing utility"
-    status: "pending"
+    status: "complete"
     deps:
       - "0.2"
     parallel: true
@@ -137,10 +137,11 @@ steps:
     files:
       - src/utils/duration.ts
       - test/unit/duration.test.ts
+    agent: codex
 
   - id: "1.2"
     description: "Create logger utility with rotation"
-    status: "pending"
+    status: "complete"
     deps:
       - "0.2"
     parallel: true
@@ -172,10 +173,11 @@ steps:
       - test/unit/logger.test.ts
     context_files:
       - spec/sections/logging.md
+    agent: codex
 
   - id: "1.3"
     description: "Create hash utility for deduplication"
-    status: "pending"
+    status: "complete"
     deps:
       - "0.2"
     parallel: true
@@ -201,10 +203,11 @@ steps:
       - test/unit/hash.test.ts
     context_files:
       - spec/sections/deduplication.md
+    agent: codex
 
   - id: "1.4"
     description: "Create HTTP client for health checks"
-    status: "pending"
+    status: "complete"
     deps:
       - "0.2"
     parallel: true
@@ -232,10 +235,11 @@ steps:
       - test/unit/http.test.ts
     context_files:
       - spec/sections/http-client.md
+    agent: codex
 
   - id: "1.5"
     description: "Create process utilities for CLI validation and spawn helpers"
-    status: "pending"
+    status: "complete"
     deps:
       - "0.2"
     parallel: true
@@ -266,10 +270,11 @@ steps:
     files:
       - src/utils/process.ts
       - test/unit/process.test.ts
+    agent: codex
 
   - id: "1.6"
     description: "Create error classes and types"
-    status: "pending"
+    status: "complete"
     deps:
       - "0.2"
     parallel: true
@@ -297,6 +302,7 @@ steps:
     context_files:
       - spec/sections/exit-codes.md
       - spec/sections/error-status.md
+    agent: codex
 
   # ============================================================================
   # Phase 2: Configuration System
@@ -304,7 +310,7 @@ steps:
 
   - id: "2.1"
     description: "Create Zod schema for configuration validation"
-    status: "pending"
+    status: "complete"
     deps:
       - "1.1"
       - "1.6"
@@ -336,6 +342,7 @@ steps:
       - src/utils/duration.ts
       - src/utils/errors.ts
       - spec/sections/config-schema.md
+    agent: codex
 
   - id: "2.2"
     description: "Create configuration loader"
