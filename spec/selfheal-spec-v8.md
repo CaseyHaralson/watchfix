@@ -130,8 +130,14 @@ On Windows, `--daemon` exits with an error message directing users to use foregr
 
 Flags:
 - `--yes`, `-y`: Skip confirmation prompt
-- `--analyze-only`: Stop after analysis, don't apply fix
+- `--analyze-only`: Stop after analysis, don't apply fix. When `--analyze-only` is used, the `--yes` flag has no effect since there is no fix to confirm.
 - `--reanalyze`: Force re-run analysis even if already in `suggested` status
+
+**Re-analysis Failure Handling:** When `--reanalyze` is used and the new analysis fails:
+- The existing `suggestion` data is preserved (not cleared)
+- The error remains in `suggested` status
+- The failure is logged but does not count against `fix_attempts`
+- User can retry with `--reanalyze` or proceed with the existing analysis using `fix <id>` without the flag
 
 When `--analyze-only` is used, the error is left in `suggested` status after analysis completes, and the lock is released. A subsequent `selfheal fix <id>` will skip analysis and proceed directly to the fix phase.
 
@@ -229,6 +235,13 @@ $ selfheal logs -n 20
 $ selfheal logs --tail
 ```
 
+Output format matches `daemon.log` exactly:
+```
+{ISO8601 timestamp} [{LEVEL}] {message}
+```
+
+When `--tail` is used, new entries are streamed as they are written to the log file.
+
 #### `selfheal version`
 
 Shows version and environment information. This command works without a config file.
@@ -322,17 +335,18 @@ limits:
 
 cleanup:
   context_max_age_days: 7         # Delete context files older than this (default: 7)
+  context_max_size_kb: 256        # Max context file size in KB (default: 256)
 
 patterns:
   match:                          # Additional patterns to treat as errors
-    - "FATAL:"
+    - "FATAL:"                    # Plain string (case-insensitive substring)
     - "panic:"
     - "Segmentation fault"
-    - "OOMKilled"
+    - "regex:OOM.*killed"         # Regex pattern (prefix with regex:)
   ignore:                         # Patterns to skip (won't create errors)
     - "DeprecationWarning"
     - "ExperimentalWarning"
-    - "retry attempt"
+    - "regex:retry attempt \\d+"  # Regex with escaped backslash
     - "graceful shutdown"
 ```
 
@@ -427,6 +441,7 @@ const configSchema = z.object({
 
   cleanup: z.object({
     context_max_age_days: z.number().int().min(1).default(7),
+    context_max_size_kb: z.number().int().min(64).default(256),
   }).default({}),
 
   patterns: z.object({
@@ -806,6 +821,14 @@ When a file source doesn't exist at startup:
 3. Once file appears, start reading from the beginning
 4. Continue watching other sources normally in the meantime
 
+### All Sources Failure
+
+If all configured log sources fail to initialize (file doesn't exist, container not found, command fails on first execution):
+- Log an ERROR: "No log sources available"
+- Continue running the watcher (sources may become available later)
+- Log a warning every 60 seconds if still no sources are active
+- Do NOT exit - this allows recovery when files are created or containers start
+
 #### Docker Source
 
 Streams logs from a running container using `docker logs -f`. Handles:
@@ -1044,7 +1067,8 @@ The message is normalized before hashing:
 - Remove timestamps (ISO8601 patterns)
 - Remove UUIDs
 - Remove memory addresses (0x...)
-- Collapse multiple spaces
+- Collapse multiple spaces to single space
+- **Case is preserved** (not lowercased) to distinguish between different error types
 
 **Deduplication rules:**
 
@@ -1236,6 +1260,8 @@ The agent receives instructions via context files, avoiding command-line size li
 ```
 
 Context files are prefixed with the creation date (`YYYY-MM-DD`) and include the attempt number (`fix_attempts` value) to prevent collisions on retry and for easy identification.
+
+Context files are written and read using UTF-8 encoding. Non-UTF8 characters in log content are replaced with the Unicode replacement character (U+FFFD).
 
 #### Context File Format (Analysis Phase)
 
@@ -1467,10 +1493,11 @@ Context files are cleaned based on age:
 
 The date prefix is the date the context file is created (not when the error was detected). For retries, a new context file is created with the current date and incremented attempt number. Old context files for the same error remain until cleaned by age.
 
-> **Size Limit:** Context files are limited to 256KB. If the `raw_log` section exceeds this:
-> 1. Remove lines from the **beginning** of the raw log (oldest context first)
-> 2. Insert at the start: `[...{N} lines truncated due to size limit...]`
-> 3. Keep the error line and stack trace intact (trim only from context_lines_before)
+> **Size Limit:** Context files are limited to 256KB. If content exceeds this:
+> 1. First, truncate the stack trace to 32KB maximum, keeping the first and last 16KB with `[...truncated...]` in between
+> 2. If still over limit, remove lines from the **beginning** of the raw log (oldest context first)
+> 3. Insert at the start: `[...{N} lines truncated due to size limit...]`
+> 4. Keep the error line intact
 
 ---
 
@@ -2393,8 +2420,8 @@ export default defineConfig({
       reporter: ['text', 'html'],
       exclude: ['test/**', '**/*.d.ts'],
     },
-    testTimeout: 10000,
-    hookTimeout: 10000,
+    testTimeout: 30000,  // 30s for E2E tests that spawn processes
+    hookTimeout: 30000,
     // Run all tests serially (required for E2E filesystem isolation)
     sequence: {
       concurrent: false,
