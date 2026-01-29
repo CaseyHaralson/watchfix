@@ -141,6 +141,16 @@ steps:
       Logging is used throughout the application. The logger writes to both
       file (.selfheal/daemon.log) and optionally terminal. Supports log rotation
       based on file size (10MB max, 5 files).
+
+      Log format: '{ISO8601 timestamp} [{LEVEL}] {message}'
+      Example: 2025-01-27T10:30:00.000Z [INFO] Watcher started (autonomous=false)
+
+      Verbosity levels:
+      - quiet: WARN + ERROR only
+      - normal (default): INFO + WARN + ERROR
+      - verbose: DEBUG + INFO + WARN + ERROR
+
+      Terminal output is enabled in foreground mode, disabled in daemon mode.
     requirements:
       - Create src/utils/logger.ts
       - Logger class with debug, info, warn, error methods
@@ -151,11 +161,14 @@ steps:
       - Support terminal output toggle for foreground/daemon mode
     criteria:
       - Logs are written to .selfheal/daemon.log
-      - Log format matches spec
+      - Log format matches spec exactly
       - Verbosity filtering works (quiet hides INFO, verbose shows DEBUG)
       - Rotation occurs at 10MB boundary
+      - Rotated files named daemon.log.1 through daemon.log.5
+      - Unit tests verify log formatting and verbosity filtering
     files:
       - src/utils/logger.ts
+      - test/unit/logger.test.ts
 
   - id: "1.3"
     description: "Create hash utility for deduplication"
@@ -191,6 +204,12 @@ steps:
     context: |
       Health checks make HTTP GET requests expecting 2xx responses.
       Uses Node.js built-in fetch API (Node 18+).
+
+      Behavior per spec:
+      - Follow redirects up to 5 hops
+      - If 5th response is still redirect, treat as failure: "Too many redirects"
+      - Send User-Agent: selfheal/1.0 header
+      - No request body
     requirements:
       - Create src/utils/http.ts
       - "Function checkHealth(url: string, timeout: number): Promise<{success:
@@ -201,10 +220,13 @@ steps:
     criteria:
       - "Returns success: true for 2xx responses"
       - "Returns success: false with status for non-2xx"
+      - Returns error "Too many redirects" after 5 redirect hops
       - Handles timeout correctly
       - Handles network errors gracefully
+      - Unit tests cover success, failure, timeout, and redirect cases
     files:
       - src/utils/http.ts
+      - test/unit/http.test.ts
 
   - id: "1.5"
     description: "Create process utilities for CLI validation and spawn helpers"
@@ -215,6 +237,14 @@ steps:
     context: |
       Utilities for checking if CLI commands exist, spawning processes with
       timeout, and validating PIDs.
+
+      checkCliExists: Runs command with --version flag, captures first line of
+      stdout as version. Returns {exists: true, version} on success or
+      {exists: false, error} on failure. Uses shell: true on Windows.
+
+      isOurProcess: Validates PID is a selfheal process for the expected project.
+      On Unix uses 'ps -p {pid} -o args='. On Windows uses wmic or PowerShell
+      fallback. Returns false if process doesn't exist or cmdline doesn't match.
     requirements:
       - Create src/utils/process.ts
       - "Function checkCliExists(command: string): CliCheckResult"
@@ -225,10 +255,12 @@ steps:
     criteria:
       - "checkCliExists returns exists: true for 'node'"
       - "checkCliExists returns exists: false for non-existent command"
-      - spawnWithTimeout kills process on timeout
-      - isOurProcess validates PID belongs to selfheal
+      - spawnWithTimeout kills process on timeout (SIGTERM then SIGKILL after 5s)
+      - isOurProcess validates PID belongs to selfheal for correct project
+      - Unit tests cover both success and failure cases
     files:
       - src/utils/process.ts
+      - test/unit/process.test.ts
 
   - id: "1.6"
     description: "Create error classes and types"
@@ -239,6 +271,17 @@ steps:
     context: |
       Custom error classes for user-facing errors vs internal errors.
       Also defines common types used across the application.
+
+      Exit codes per spec:
+      - 0: Success
+      - 1: General error (config invalid, agent failed, etc.)
+      - 2: Watcher state conflict (already running / not running)
+      - 3: Target not actionable (error not found, wrong status, locked)
+      - 4: Database schema mismatch (requires migration)
+      - 130: Interrupted by user (SIGINT)
+
+      ErrorStatus type: 'pending' | 'analyzing' | 'suggested' | 'fixing' |
+      'fixed' | 'failed' | 'ignored'
     requirements:
       - Create src/utils/errors.ts
       - class UserError extends Error (user-facing, shown directly)
@@ -249,8 +292,11 @@ steps:
       - UserError instances have name 'UserError'
       - InternalError supports cause parameter
       - Exit codes match spec (0, 1, 2, 3, 4, 130)
+      - ErrorStatus includes all 7 status values
+      - Unit tests verify error class behavior
     files:
       - src/utils/errors.ts
+      - test/unit/errors.test.ts
 
   # ============================================================================
   # Phase 2: Configuration System
@@ -324,11 +370,11 @@ steps:
     context: |
       Default command and args for each agent provider (claude, gemini, codex).
       These are used when only 'provider' is specified in config.
-      Note: The spec shows these at src/agents/defaults.ts, but they are also
-      imported by the config system, so placing in src/config/defaults.ts
-      is acceptable. The agent factory will import from here.
+
+      Per spec project structure, this goes in src/agents/defaults.ts.
+      The config loader and agent factory both import from here.
     requirements:
-      - Create src/config/defaults.ts
+      - Create src/agents/defaults.ts
       - Export AGENT_DEFAULTS constant with claude, gemini, codex configs
       - "Each has: command, args, stderrIsProgress"
       - Export AGENT_CONFIG_DEFAULTS for timeout (5m) and retries (2)
@@ -337,7 +383,7 @@ steps:
       - Gemini default uses '--yolo -p'
       - Codex default uses 'exec --yolo'
     files:
-      - src/config/defaults.ts
+      - src/agents/defaults.ts
 
   # ============================================================================
   # Phase 3: Database Layer
@@ -469,9 +515,41 @@ steps:
       - "1.3"
     parallel: false
     context: |
-      Built-in patterns for detecting errors in logs. Includes JavaScript errors,
-      Node.js errors, Python tracebacks, Go panics, Docker errors, database errors.
-      Also extracts error type for display and deduplication.
+      Built-in patterns for detecting errors in logs. These are always active
+      and cannot be disabled.
+
+      BUILTIN_MATCH_PATTERNS (trigger detection):
+      - JavaScript: Error:, TypeError:, ReferenceError:, SyntaxError:,
+        RangeError:, URIError:, EvalError:
+      - Node.js: UnhandledPromiseRejection, ECONNREFUSED, ENOTFOUND, ETIMEDOUT,
+        EADDRINUSE, EACCES, EPERM
+      - Python: Traceback (most recent call last), Exception:, Error:,
+        AssertionError:
+      - Go: panic:, fatal error:, runtime error:
+      - Docker: container is not running, unhealthy, OOMKilled, no such container,
+        connection refused
+      - Database: SQLSTATE[, deadlock detected, duplicate key, constraint violation
+      - Generic: FATAL, CRITICAL, EMERGENCY (case-insensitive, must be followed
+        by : or whitespace)
+
+      BUILTIN_IGNORE_PATTERNS (suppress detection):
+      - Log levels: DEBUG, TRACE, VERBOSE, INFO (at line start, followed by : or
+        whitespace)
+      - Success indicators: successfully, healthy, passed, completed, OK
+
+      Ignore patterns take precedence over match patterns.
+
+      Custom patterns from config use 'regex:' prefix for regex, otherwise
+      case-insensitive substring match.
+
+      extractErrorType uses these patterns in order:
+      - /^(\w+Error):/ -> capture group (TypeError, ReferenceError, etc.)
+      - /^(\w+Exception):/ -> capture group
+      - /(E[A-Z]{2,})(?:[\s:,]|$)/ -> ECONNREFUSED, ENOTFOUND, etc.
+      - /^(panic):/ -> Go panic
+      - /^(FATAL|CRITICAL):?/i -> Generic fatal
+      - /SQLSTATE\[(\w+)\]/ -> Database errors
+      - Default: 'Error'
     requirements:
       - Create src/watcher/patterns.ts
       - BUILTIN_MATCH_PATTERNS array of patterns
@@ -488,12 +566,14 @@ steps:
       - extractErrorType returns correct type for known patterns
     files:
       - src/watcher/patterns.ts
-      - test/unit/parser.test.ts
     context_files:
       - src/utils/hash.ts
     risk_notes: |
       Pattern matching is critical for correct error detection. Regex patterns
       should be carefully tested to avoid false positives or missed errors.
+      Test with real log samples from JavaScript, Python, Go, and Docker.
+      Note: Tests are in test/unit/parser.test.ts (covers both patterns.ts
+      and parser.ts per spec).
 
   - id: "4.2"
     description: "Create multi-line parser with stack trace handling"
@@ -506,6 +586,26 @@ steps:
       Parser buffers multi-line stack traces and captures context window
       (lines before/after error). Continuation patterns detect stack frames.
       Buffer flushes on new error, non-continuation line, or 100ms timeout.
+
+      Continuation patterns (attached to previous error):
+      - Lines starting with 'at ' (JS stack frames)
+      - Lines starting with whitespace followed by 'at ' or 'in '
+      - Lines matching /^\s+File "/ (Python stack frames)
+      - Lines matching /^\s+\d+:\d+/ (Go stack frames with line:col)
+      - Lines matching /^\s+\.\.\./ (truncation indicators)
+
+      Context window behavior:
+      - context_lines_before: Lines preceding the error (default: 10)
+      - context_lines_after: Lines following the END of the stack trace (default: 5)
+      - Important: "after" context starts after stack trace ends, not after
+        error line
+
+      Buffer flushes when:
+      - A new error line is detected
+      - A non-continuation, non-error line is detected
+      - 100ms passes with no new input
+
+      Line length limit: Lines > 64KB are truncated with '... [truncated]' suffix.
     requirements:
       - Create src/watcher/parser.ts
       - "class ErrorParser with processLine(event: LogEvent) method"
@@ -517,15 +617,20 @@ steps:
     criteria:
       - Multi-line stack traces are grouped correctly
       - Context window captures surrounding lines
-      - After context starts after stack trace ends
-      - Large lines are truncated
-      - Buffer flushes on timeout
+      - After context starts after stack trace ends (not after error line)
+      - Large lines are truncated with '... [truncated]' suffix
+      - Buffer flushes on 100ms timeout
     files:
       - src/watcher/parser.ts
+      - test/unit/parser.test.ts
     context_files:
       - src/watcher/patterns.ts
       - src/utils/logger.ts
       - src/utils/hash.ts
+    risk_notes: |
+      The 100ms timeout requires careful async handling. The context window
+      logic must correctly distinguish between "after error line" and
+      "after stack trace ends" - test with multi-line and single-line errors.
 
   # ============================================================================
   # Phase 5: Log Source Watchers
@@ -659,6 +764,19 @@ steps:
     context: |
       Orchestrates multiple log sources, routing events through a serialized
       queue to the parser. Handles deduplication at the database level.
+
+      Deduplication rules per spec:
+      - If existing error has status pending/analyzing/suggested/fixing: drop new
+      - If existing error has status fixed/failed/ignored: create new entry
+
+      When creating new entry for recurring error:
+      - created_at set to new detection time
+      - fix_attempts reset to 0
+      - suggestion and fix_result cleared (NULL)
+      - status set to pending
+
+      The event queue must be serial (concurrency 1) to avoid race conditions
+      in deduplication and database writes.
     requirements:
       - Create src/watcher/index.ts
       - class WatcherOrchestrator
@@ -672,6 +790,7 @@ steps:
       - All configured sources start
       - Events processed serially (no race conditions)
       - Duplicate errors are dropped (log deduplicated)
+      - Recurring errors create new entries when previous is fixed/failed/ignored
       - New errors inserted with status 'pending'
       - Activity log records error_detected, error_deduplicated
     files:
@@ -680,6 +799,11 @@ steps:
       - src/watcher/sources/types.ts
       - src/watcher/parser.ts
       - src/db/queries.ts
+    risk_notes: |
+      The serial event queue is critical - parallel processing would cause
+      race conditions in deduplication. Test concurrent event arrival from
+      multiple sources. Handle the case where all sources fail to initialize
+      (log ERROR but continue running, warn every 60s).
 
   # ============================================================================
   # Phase 6: Agent System
@@ -739,7 +863,7 @@ steps:
       - src/agents/types.ts
       - src/utils/process.ts
       - src/utils/logger.ts
-      - src/config/defaults.ts
+      - src/agents/defaults.ts
 
   - id: "6.3"
     description: "Create agent factory and provider-specific handlers"
@@ -766,7 +890,7 @@ steps:
       - src/agents/codex.ts
     context_files:
       - src/agents/base.ts
-      - src/config/defaults.ts
+      - src/agents/defaults.ts
 
   # ============================================================================
   # Phase 7: Context File Generation
@@ -1047,6 +1171,21 @@ steps:
     context: |
       Starts watching configured log sources. Supports foreground and daemon
       mode, manual and autonomous mode.
+
+      Mode combinations:
+      - (none): Foreground, manual mode. Output to terminal and log.
+      - --daemon: Background, manual mode. Output to log only. Unix only.
+      - --autonomous: Foreground, autonomous mode. Auto-fixes without approval.
+      - --daemon --autonomous: Background, autonomous mode. Unix only.
+
+      On Windows, --daemon exits with error directing users to foreground
+      mode or PM2.
+
+      The daemon reads config once at startup. To apply config changes, run
+      'selfheal stop' and restart.
+
+      Before starting, call recoverStaleErrors() to handle errors left in
+      analyzing/fixing status from a previous crash.
     requirements:
       - Create src/cli/commands/watch.ts
       - Validate config and agent CLI
@@ -1056,17 +1195,25 @@ steps:
       - "Daemon: spawn detached, output to log only"
       - Store watcher_state on start
       - In autonomous mode, trigger fix queue processing
+      - Call recoverStaleErrors() on startup
     criteria:
       - Foreground mode shows output in terminal
-      - Daemon mode spawns background process
+      - Daemon mode spawns background process (Unix only)
+      - Windows with --daemon shows helpful error
       - watcher_state recorded in database
-      - Cannot start if already running
+      - Cannot start if already running (exit code 2)
+      - Stale errors recovered on startup
     files:
       - src/cli/commands/watch.ts
     context_files:
       - src/watcher/index.ts
       - src/fixer/index.ts
       - src/utils/daemon.ts
+    risk_notes: |
+      The daemon child uses --daemon-child internal flag with SELFHEAL_DAEMON
+      env var. If user manually passes --daemon-child without env var, exit
+      with error. Test the parent-child handoff carefully on both Unix and
+      Windows (Windows should reject --daemon early).
 
   - id: "11.4"
     description: "Create stop command"
