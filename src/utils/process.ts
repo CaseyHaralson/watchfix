@@ -140,13 +140,15 @@ export async function spawnWithTimeout(
 
 function readCommandLine(pid: number): string {
   if (process.platform === 'win32') {
-    try {
-      const output = spawnSync(
-        'wmic',
-        ['process', 'where', `ProcessId=${pid}`, 'get', 'CommandLine', '/format:list'],
-        { encoding: 'utf8', timeout: CLI_CHECK_TIMEOUT_MS },
-      );
-      const text = `${output.stdout ?? ''}${output.stderr ?? ''}`;
+    const output = spawnSync(
+      'wmic',
+      ['process', 'where', `ProcessId=${pid}`, 'get', 'CommandLine', '/format:list'],
+      { encoding: 'utf8', timeout: CLI_CHECK_TIMEOUT_MS },
+    );
+
+    // Check for wmic failure - fall through to PowerShell
+    if (!output.error && output.status === 0) {
+      const text = `${output.stdout ?? ''}`;
       const line = text
         .split('\n')
         .map((value) => value.trim())
@@ -154,13 +156,9 @@ function readCommandLine(pid: number): string {
       if (line) {
         return line.slice('commandline='.length);
       }
-      if (text.trim()) {
-        return text.trim();
-      }
-    } catch {
-      // Fall through to PowerShell
     }
 
+    // PowerShell fallback (always reachable now)
     const powerShell = spawnSync(
       'powershell',
       ['-Command', `(Get-Process -Id ${pid}).CommandLine`],
