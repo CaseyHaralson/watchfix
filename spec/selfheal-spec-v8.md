@@ -70,8 +70,9 @@ selfheal monitors application logs, detects errors using pattern matching, and d
 | Flag | Description |
 |------|-------------|
 | `--config`, `-c <path>` | Use alternate config file (default: `./selfheal.yaml`) |
-| `--verbose`, `-v` | Increase output verbosity (can stack: -vv) |
+| `--verbose` | Increase output verbosity |
 | `--quiet`, `-q` | Suppress non-essential output |
+| `--version`, `-v` | Show version and exit |
 | `--help`, `-h` | Show help for command |
 
 ### Exit Codes
@@ -88,15 +89,17 @@ selfheal monitors application logs, detects errors using pattern matching, and d
 
 #### `selfheal init`
 
-Creates `selfheal.yaml` with sensible defaults. Prompts for:
-- Project name (defaults to directory name)
-- Agent provider (claude/gemini/codex)
-- Initial log source (optional)
-
-Post-creation actions:
-- Validates that the selected agent CLI is installed
+Creates `selfheal.yaml` with a commented template:
+- Sets `project.name` to the current directory name
+- Sets `agent.provider` to `claude` (most common)
+- Includes example log source configurations (commented out)
 - Appends `.selfheal/` to `.gitignore` if not already present (creates file if needed)
-- Fails fast with installation instructions if agent CLI not found
+
+The generated file includes comments explaining each option. Users edit the file to configure their specific log sources and agent provider.
+
+Flags:
+- `--agent <provider>`: Set initial agent provider (claude, gemini, codex)
+- `--force`: Overwrite existing `selfheal.yaml`
 
 #### `selfheal watch`
 
@@ -129,7 +132,7 @@ Flags:
 
 When `--analyze-only` is used, the error is left in `suggested` status after analysis completes, and the lock is released. A subsequent `selfheal fix <id>` will skip analysis and proceed directly to the fix phase.
 
-**Attempt Number Handling:** When fixing a `suggested` error (skipping analysis), the result file uses the current `fix_attempts` value as the attempt number. The analysis file from the previous phase is referenced in the context.
+**Attempt Number Handling:** When fixing a `suggested` error (skipping analysis), the result file uses the current `fix_attempts` value as the attempt number. The analysis is read from the `suggestion` column in the database (stored as JSON from the previous analysis phase) and embedded in the fix context file under "Previous Analysis".
 
 **Interrupt Handling:** For interactive commands (`fix`, `fix --all`), SIGINT cancels the current operation. If an agent is running, it receives SIGTERM. The error remains in its current status (`analyzing` or `fixing`) and the lock is released. On next attempt, stale recovery will reset it to `pending`.
 
@@ -326,10 +329,17 @@ patterns:
 ```typescript
 import { z } from 'zod';
 
-const durationSchema = z.string().regex(
-  /^\d+[smh]$/,
-  'Duration must be a number followed by s, m, or h (e.g., "5m", "30s", "1h")'
-);
+const durationSchema = z.string()
+  .regex(
+    /^\d+[smh]$/,
+    'Duration must be a number followed by s, m, or h (e.g., "5m", "30s", "1h")'
+  )
+  .refine((val) => {
+    const num = parseInt(val.slice(0, -1), 10);
+    const unit = val.slice(-1);
+    const ms = num * { s: 1000, m: 60000, h: 3600000 }[unit]!;
+    return ms <= 24 * 60 * 60 * 1000; // Max 24 hours
+  }, 'Duration cannot exceed 24 hours');
 
 const fileSourceSchema = z.object({
   name: z.string().min(1),
@@ -512,6 +522,10 @@ const PROMPTS = {
   fix: (contextPath: string) =>
     `Read ${contextPath} and follow the instructions.`,
 };
+
+// Example contextPath values:
+// - Analysis: .selfheal/context/2025-01-27-error-1-attempt-0-analyze.md
+// - Fix: .selfheal/context/2025-01-27-error-1-attempt-0-fix.md
 ```
 
 The context file contains all necessary details including mode, error information, and output file path.
@@ -2092,7 +2106,7 @@ In daemon mode, logs are written to file only.
 
 | Flag | DEBUG | INFO | WARN | ERROR |
 |------|-------|------|------|-------|
-| `--quiet` | ✗ | ✗ | ✓ | ✓ |
+| `--quiet`, `-q` | ✗ | ✗ | ✓ | ✓ |
 | (default) | ✗ | ✓ | ✓ | ✓ |
 | `--verbose` | ✓ | ✓ | ✓ | ✓ |
 
@@ -2284,17 +2298,24 @@ Full workflow tests with mock agent:
 // Invoked as: node mock-agent.js "Read .selfheal/context/..."
 
 const prompt = process.argv[2];
-const contextMatch = prompt.match(/context\/[\d-]+-error-(\d+)\.md/);
-const errorId = contextMatch?.[1];
 
-// Read the context file to determine mode
+// Extract context file path from prompt
+// Pattern: .selfheal/context/2025-01-27-error-1-attempt-0-analyze.md
 const contextPath = prompt.match(/\.selfheal\/context\/[^\s]+/)?.[0];
-const context = fs.readFileSync(contextPath, 'utf8');
-const isAnalyze = context.includes('## Mode\nanalyze');
+if (!contextPath) {
+  console.error('No context path found in prompt');
+  process.exit(1);
+}
 
-// Write appropriate response
-const outputPath = contextPath
-  .replace('.md', isAnalyze ? '-analysis.yaml' : '-result.yaml');
+const context = fs.readFileSync(contextPath, 'utf8');
+const isAnalyze = contextPath.endsWith('-analyze.md');
+
+// Determine output path based on input file
+// -analyze.md -> -analysis.yaml
+// -fix.md -> -result.yaml
+const outputPath = isAnalyze
+  ? contextPath.replace('-analyze.md', '-analysis.yaml')
+  : contextPath.replace('-fix.md', '-result.yaml');
 
 const response = isAnalyze
   ? MOCK_ANALYSIS_RESPONSE
@@ -2386,6 +2407,8 @@ Error: Error #5 is currently being processed by another process.
 Error: Agent did not produce expected output after 3 attempts.
   Check .selfheal/daemon.log for details.
 
+Error: Error #42 not found.
+
 Error: Daemon mode is not supported on Windows.
   Use foreground mode: selfheal watch --autonomous
   Or use a process manager like PM2: pm2 start selfheal -- watch --autonomous
@@ -2434,12 +2457,12 @@ try {
 
 ```bash
 $ selfheal init
-Creating selfheal.yaml...
-? Project name: my-api
-? Agent provider: claude
-✓ Claude CLI found (v1.2.3)
 ✓ Created selfheal.yaml
 ✓ Added .selfheal/ to .gitignore
+
+Edit selfheal.yaml to configure your log sources and agent provider.
+
+$ vi selfheal.yaml  # Configure log sources
 
 $ selfheal config validate
 ✓ Config syntax valid
