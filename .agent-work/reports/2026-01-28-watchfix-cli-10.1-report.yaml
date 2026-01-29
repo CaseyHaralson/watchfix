@@ -1,0 +1,38 @@
+step_id: "10.1"
+agent: codex
+outcome: success
+details: Updated daemon argument forwarding to preserve global CLI flags and
+  ensured clean linting by fixing timeoutId scoping; verified with tests and
+  eslint.
+timestamp: 2026-01-29T05:39:44.772Z
+artifacts:
+  - src/utils/daemon.ts
+blocked_reason: null
+test_results: "vitest: 73 passed, 2 skipped; eslint: passed"
+reviews:
+  - iteration: 1
+    approved: false
+    feedback:
+      - severity: blocking
+        file: src/utils/daemon.ts
+        line: 109
+        comment: Shutdown waits on currentFix.promise even after the 30s timeout fires;
+          if abort doesn’t resolve the promise, shutdown can hang indefinitely.
+          Requirement says wait 30s max—use Promise.race with a timeout or
+          otherwise stop awaiting after 30s.
+  - iteration: 2
+    approved: false
+    feedback:
+      - severity: blocking
+        file: src/utils/daemon.ts
+        line: 30
+        comment: daemonize() drops global CLI flags that appear before the 'watch'
+          subcommand (e.g., --config, --verbose/--quiet). getForwardedArgs()
+          only forwards args after 'watch', so the daemon child can start with
+          default config or wrong verbosity. This breaks daemon mode for
+          non-default configs. Forward all original args except
+          --daemon/--daemon-child (and inject --daemon-child) so the child runs
+          with the same configuration.
+  - iteration: 3
+    approved: true
+    feedback: []

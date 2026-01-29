@@ -1,0 +1,7 @@
+success: true
+summary: Added guard for missing user data in worker handler
+files_changed:
+  - path: src/worker.ts
+    change: Added early return when user is undefined
+notes: |
+  This prevents the handler from throwing when the API returns no user data.

@@ -1,0 +1,12 @@
+2026-01-28T12:00:00.000Z INFO server starting
+2026-01-28T12:00:01.250Z INFO listening on http://localhost:3000
+2026-01-28T12:00:05.100Z WARN DeprecationWarning: legacy config format
+2026-01-28T12:00:10.500Z ERROR Unhandled exception in worker
+TypeError: Cannot read properties of undefined (reading 'id')
+    at Worker.handle (/app/src/worker.js:42:15)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+2026-01-28T12:00:12.700Z INFO retry attempt 1
+2026-01-28T12:00:15.900Z FATAL: database connection lost
+2026-01-28T12:00:16.100Z panic: runtime error: invalid memory address or nil pointer
+2026-01-28T12:00:20.000Z ERROR Out of memory: process killed
+2026-01-28T12:00:21.250Z INFO graceful shutdown

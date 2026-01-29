@@ -1,0 +1,26 @@
+step_id: "9.1"
+agent: codex
+outcome: success
+details: Updated FixQueue processing to run a single serialized loop and
+  continue draining queued errors after an in-flight fix completes.
+timestamp: 2026-01-29T05:14:37.407Z
+artifacts:
+  - src/fixer/queue.ts
+blocked_reason: null
+test_results: npm test (73 passed, 2 skipped); npm run lint
+reviews:
+  - iteration: 1
+    approved: false
+    feedback:
+      - severity: blocking
+        file: src/fixer/queue.ts
+        line: 31
+        comment: processQueueIfReady waits for an in-flight fix then returns without
+          processing any newly queued errors. In autonomous mode this can leave
+          pending/suggested errors unprocessed unless an external caller
+          re-invokes the method after completion, which contradicts ‘processes
+          errors FIFO’. Consider looping after the await (or chaining) to
+          continue processing until the queue is empty.
+  - iteration: 2
+    approved: true
+    feedback: []
