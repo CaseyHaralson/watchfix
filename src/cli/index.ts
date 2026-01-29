@@ -7,6 +7,7 @@ import { showCommand } from './commands/show.js';
 import { statusCommand } from './commands/status.js';
 import { stopCommand } from './commands/stop.js';
 import { watchCommand } from './commands/watch.js';
+import { fixCommand } from './commands/fix.js';
 import { EXIT_CODES, InternalError, UserError } from '../utils/errors.js';
 
 const require = createRequire(import.meta.url);
@@ -83,10 +84,13 @@ const registerCommands = (program: Command): void => {
       .description('Analyze and fix specific error')
       .argument('[id]', 'Error identifier')
       .option('--all', 'Fix all pending/suggested errors sequentially')
+      .option('--confirm-each', 'Prompt for confirmation before each fix')
       .option('-y, --yes', 'Skip confirmation prompt')
       .option('--analyze-only', "Stop after analysis, don't apply fix")
       .option('--reanalyze', 'Force re-run analysis even if already suggested')
-      .action(notImplemented('fix'))
+      .action(async (id, options) => {
+        await fixCommand(id, options);
+      })
   );
 
   addGlobalOptions(

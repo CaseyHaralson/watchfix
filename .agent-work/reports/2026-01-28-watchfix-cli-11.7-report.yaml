@@ -1,0 +1,40 @@
+step_id: "11.7"
+agent: codex
+outcome: success
+details: Ensure analysis summaries are printed for non-interactive and bulk fix
+  paths, and clarify the no-analysis message.
+timestamp: 2026-01-29T06:22:47.497Z
+artifacts:
+  - src/cli/commands/fix.ts
+blocked_reason: null
+test_results: npm test (73 passed, 2 skipped; 15 files, 1 skipped); npm run lint
+reviews:
+  - iteration: 1
+    approved: false
+    feedback:
+      - severity: blocking
+        file: src/cli/commands/fix.ts
+        line: 242
+        comment: Requirement says to display the analysis summary, but when --yes is
+          used (so shouldPrompt=false) runSingleFix never prints analysis before
+          calling fixError; it only prints the final fix result. That means
+          summary is skipped for the most common non-interactive path. Consider
+          printing analysis from FixResult (or stored suggestion) even when not
+          prompting.
+      - severity: blocking
+        file: src/cli/commands/fix.ts
+        line: 410
+        comment: In --all mode without --confirm-each, each error is fixed with fixError
+          and only the final result is printed. The analysis summary is never
+          displayed, so the requirement to display analysis summary is unmet for
+          bulk mode. Emit summary per error when available even without
+          confirmations.
+      - severity: suggestion
+        file: src/cli/commands/fix.ts
+        line: 180
+        comment: reportAnalysis prints "Analysis available for error" when analysis is
+          null, which reads like the opposite of what happened. Consider a
+          clearer message (e.g., "No analysis available") to avoid confusion.
+  - iteration: 2
+    approved: true
+    feedback: []
