@@ -4,7 +4,7 @@
 metadata:
   created_at: "2026-01-28T00:00:00Z"
   created_by: "Discovery-Agent"
-  version: "1.0"
+  version: "1.1"
   source_idea: "Build selfheal v8 from specification - a CLI tool that watches
     logs, detects errors, and dispatches AI agents to fix them"
   outcomes:
@@ -261,11 +261,13 @@ steps:
     status: "pending"
     deps:
       - "1.1"
+      - "1.6"
     parallel: false
     context: |
       The configuration is validated using Zod. This includes the full schema
       from the spec with duration strings, log sources (file/docker/command),
-      agent settings, verification config, etc.
+      agent settings, verification config, etc. Uses UserError for validation
+      errors to provide clear user-facing messages.
     requirements:
       - Create src/config/schema.ts
       - Define durationSchema with regex validation and max 24h limit
@@ -284,13 +286,13 @@ steps:
       - test/unit/config.test.ts
     context_files:
       - src/utils/duration.ts
+      - src/utils/errors.ts
 
   - id: "2.2"
     description: "Create configuration loader"
     status: "pending"
     deps:
       - "2.1"
-      - "1.6"
     parallel: false
     context: |
       Loads and validates selfheal.yaml from disk. Resolves paths relative
@@ -322,6 +324,9 @@ steps:
     context: |
       Default command and args for each agent provider (claude, gemini, codex).
       These are used when only 'provider' is specified in config.
+      Note: The spec shows these at src/agents/defaults.ts, but they are also
+      imported by the config system, so placing in src/config/defaults.ts
+      is acceptable. The agent factory will import from here.
     requirements:
       - Create src/config/defaults.ts
       - Export AGENT_DEFAULTS constant with claude, gemini, codex configs
@@ -373,6 +378,8 @@ steps:
     context: |
       Define the database schema with tables: errors, watcher_state, activity_log,
       schema_version. For v1, single schema version with mismatch detection.
+      Note: The spec mentions migrations.ts but for v1 with a single schema
+      version, combining schema and migration logic into schema.ts is acceptable.
     requirements:
       - Create src/db/schema.ts
       - Define SCHEMA_VERSION = 1
@@ -458,6 +465,7 @@ steps:
     description: "Create error pattern matching and type extraction"
     status: "pending"
     deps:
+      - "0.2"
       - "1.3"
     parallel: false
     context: |
@@ -481,6 +489,11 @@ steps:
     files:
       - src/watcher/patterns.ts
       - test/unit/parser.test.ts
+    context_files:
+      - src/utils/hash.ts
+    risk_notes: |
+      Pattern matching is critical for correct error detection. Regex patterns
+      should be carefully tested to avoid false positives or missed errors.
 
   - id: "4.2"
     description: "Create multi-line parser with stack trace handling"
@@ -512,6 +525,7 @@ steps:
     context_files:
       - src/watcher/patterns.ts
       - src/utils/logger.ts
+      - src/utils/hash.ts
 
   # ============================================================================
   # Phase 5: Log Source Watchers
@@ -922,6 +936,10 @@ steps:
       - src/fixer/output.ts
       - src/fixer/verifier.ts
       - src/fixer/lock.ts
+    risk_notes: |
+      The fix orchestrator is the most complex component, coordinating agents,
+      locking, status transitions, and verification. Thorough testing with
+      mock agents is essential.
 
   # ============================================================================
   # Phase 10: Daemon Management
