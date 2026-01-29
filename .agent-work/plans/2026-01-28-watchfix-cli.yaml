@@ -1437,7 +1437,7 @@ steps:
 
   - id: "11.11"
     description: "Create clean command"
-    status: "pending"
+    status: "complete"
     deps:
       - "11.1"
       - "3.3"
@@ -1460,6 +1460,7 @@ steps:
       - src/cli/commands/clean.ts
     context_files:
       - src/db/queries.ts
+    agent: codex
 
   - id: "11.12"
     description: "Create version command"

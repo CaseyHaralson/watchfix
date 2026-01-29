@@ -11,6 +11,7 @@ import { fixCommand } from './commands/fix.js';
 import { ignoreCommand } from './commands/ignore.js';
 import { logsCommand } from './commands/logs.js';
 import { configValidateCommand } from './commands/config.js';
+import { cleanCommand } from './commands/clean.js';
 import { EXIT_CODES, InternalError, UserError } from '../utils/errors.js';
 
 const require = createRequire(import.meta.url);
@@ -21,12 +22,6 @@ const addGlobalOptions = (command: Command): Command =>
     .option('-c, --config <path>', 'Use alternate config file')
     .option('--verbose', 'Increase output verbosity')
     .option('-q, --quiet', 'Suppress non-essential output');
-
-const notImplemented =
-  (label: string) =>
-  async (): Promise<void> => {
-    throw new UserError(`${label} is not implemented yet.`);
-  };
 
 const registerCommands = (program: Command): void => {
   addGlobalOptions(
@@ -134,7 +129,11 @@ const registerCommands = (program: Command): void => {
     program
       .command('clean')
       .description('Remove old context files')
-      .action(notImplemented('clean'))
+      .option('--dry-run', 'Show what would be removed without deleting')
+      .option('--force', 'Skip confirmation prompt')
+      .action(async (options) => {
+        await cleanCommand(options);
+      })
   );
 
   addGlobalOptions(
