@@ -463,7 +463,7 @@ steps:
 
   - id: "3.3"
     description: "Create typed query functions for errors"
-    status: "pending"
+    status: "complete"
     deps:
       - "3.2"
     parallel: false
@@ -488,6 +488,7 @@ steps:
       - src/db/queries.ts
     context_files:
       - src/db/schema.ts
+    agent: codex
 
   - id: "3.4"
     description: "Create locking utilities"
