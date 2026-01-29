@@ -959,7 +959,7 @@ steps:
 
   - id: "8.1"
     description: "Create verification runner"
-    status: "pending"
+    status: "complete"
     deps:
       - "1.4"
       - "1.5"
@@ -995,6 +995,7 @@ steps:
       - src/utils/duration.ts
       - src/utils/logger.ts
       - spec/sections/verification.md
+    agent: codex
 
   # ============================================================================
   # Phase 9: Fix Pipeline
