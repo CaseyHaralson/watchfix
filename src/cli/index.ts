@@ -9,6 +9,7 @@ import { stopCommand } from './commands/stop.js';
 import { watchCommand } from './commands/watch.js';
 import { fixCommand } from './commands/fix.js';
 import { ignoreCommand } from './commands/ignore.js';
+import { logsCommand } from './commands/logs.js';
 import { EXIT_CODES, InternalError, UserError } from '../utils/errors.js';
 
 const require = createRequire(import.meta.url);
@@ -109,7 +110,10 @@ const registerCommands = (program: Command): void => {
       .command('logs')
       .description('Show activity log')
       .option('--tail', 'Follow activity log')
-      .action(notImplemented('logs'))
+      .option('-n, --lines <count>', 'Number of lines to show', `${50}`)
+      .action(async (options) => {
+        await logsCommand(options);
+      })
   );
 
   const configCommand = addGlobalOptions(
