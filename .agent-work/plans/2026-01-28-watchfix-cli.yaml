@@ -1546,7 +1546,7 @@ steps:
 
   - id: "12.3"
     description: "Create E2E tests for manual flow"
-    status: "pending"
+    status: "complete"
     deps:
       - "11.7"
       - "12.1"
@@ -1570,6 +1570,7 @@ steps:
     context_files:
       - test/helpers/mock-agent.ts
       - test/helpers/test-utils.ts
+    agent: codex
 
   - id: "12.4"
     description: "Create E2E tests for autonomous flow"
