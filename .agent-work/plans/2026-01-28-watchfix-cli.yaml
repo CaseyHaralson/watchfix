@@ -1126,7 +1126,7 @@ steps:
 
   - id: "11.1"
     description: "Create CLI entry point and command structure"
-    status: "pending"
+    status: "complete"
     deps:
       - "2.2"
       - "1.6"
@@ -1155,6 +1155,7 @@ steps:
       - src/config/loader.ts
       - src/utils/errors.ts
       - spec/sections/exit-codes.md
+    agent: codex
 
   - id: "11.2"
     description: "Create init command"
