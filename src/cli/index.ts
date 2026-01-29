@@ -8,6 +8,7 @@ import { statusCommand } from './commands/status.js';
 import { stopCommand } from './commands/stop.js';
 import { watchCommand } from './commands/watch.js';
 import { fixCommand } from './commands/fix.js';
+import { ignoreCommand } from './commands/ignore.js';
 import { EXIT_CODES, InternalError, UserError } from '../utils/errors.js';
 
 const require = createRequire(import.meta.url);
@@ -98,7 +99,9 @@ const registerCommands = (program: Command): void => {
       .command('ignore')
       .description('Mark error as ignored')
       .argument('<id>', 'Error identifier')
-      .action(notImplemented('ignore'))
+      .action(async (id, options) => {
+        await ignoreCommand(id, options);
+      })
   );
 
   addGlobalOptions(
