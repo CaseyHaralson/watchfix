@@ -1,0 +1,1470 @@
+# selfheal CLI Implementation Plan
+# A TypeScript CLI tool that watches project logs, detects errors, and uses AI coding agents to fix them
+
+metadata:
+  created_at: "2026-01-28T00:00:00Z"
+  created_by: "Discovery-Agent"
+  version: "1.0"
+  source_idea: "Build selfheal v8 from specification - a CLI tool that watches
+    logs, detects errors, and dispatches AI agents to fix them"
+  outcomes:
+    - Users can configure selfheal via YAML to watch log sources (file, docker,
+      command)
+    - Errors are automatically detected using built-in and custom patterns
+    - AI agents (Claude, Gemini, Codex) analyze errors and suggest/apply fixes
+    - Fixes are verified via test commands and health checks
+    - Users can run in manual mode (review fixes) or autonomous mode (auto-fix)
+    - Daemon mode supports background operation with proper lifecycle management
+  notes: |
+    This is a new TypeScript project using:
+    - Node.js 18+
+    - TypeScript with ESM modules
+    - Vitest for testing
+    - Commander for CLI
+    - better-sqlite3 for database
+    - chokidar for file watching
+    - zod for config validation
+    - yaml for YAML parsing
+
+    Build/test commands:
+    - npm install (install dependencies)
+    - npm run build (compile TypeScript)
+    - npm test (run vitest)
+    - npm run lint (run eslint)
+
+    Key conventions:
+    - All times stored as ISO8601 strings
+    - Paths relative to config file directory
+    - SQLite with WAL mode for concurrent access
+    - Context files in .selfheal/context/
+    - Database at .selfheal/errors.db
+
+steps:
+  # ============================================================================
+  # Phase 0: Project Setup
+  # ============================================================================
+
+  - id: "0.1"
+    description: "Initialize project structure with package.json, TypeScript config,
+      and tooling"
+    status: "pending"
+    deps: []
+    parallel: false
+    context: |
+      Create the foundational project structure for a TypeScript CLI application.
+      This includes package.json with all dependencies, tsconfig.json for TypeScript
+      compilation, and configuration files for linting and formatting.
+    requirements:
+      - Create package.json with name 'selfheal', type 'module', bin pointing to
+        ./dist/cli/index.js
+      - "Add all production dependencies: commander, better-sqlite3, chokidar,
+        zod, yaml"
+      - "Add all dev dependencies: typescript, vitest, eslint, prettier,
+        @types/better-sqlite3, @types/node"
+      - Create tsconfig.json targeting ES2022, NodeNext module resolution,
+        strict mode
+      - Create .eslintrc.cjs and .prettierrc
+      - Create vitest.config.ts with node environment, 30s timeout, serial test
+        execution
+      - Create .gitignore with node_modules, dist, .selfheal/
+      - Create src/ directory structure as per spec
+    criteria:
+      - npm install completes without errors
+      - npm run build compiles successfully (after source files exist)
+      - "Directory structure matches spec: src/cli, src/agents, src/watcher,
+        src/fixer, src/db, src/config, src/utils"
+    files:
+      - package.json
+      - tsconfig.json
+      - .eslintrc.cjs
+      - .prettierrc
+      - vitest.config.ts
+      - .gitignore
+
+  - id: "0.2"
+    description: "Install project dependencies"
+    status: "pending"
+    deps:
+      - "0.1"
+    parallel: false
+    context: |
+      Run npm install to install all declared dependencies. This must complete
+      before any TypeScript code can be compiled or tested.
+    requirements:
+      - Run npm install
+      - Verify node_modules directory is created
+      - Verify TypeScript compiler is available
+    criteria:
+      - npm install exits with code 0
+      - node_modules/.bin/tsc exists
+      - node_modules/.bin/vitest exists
+    files: []
+    commands:
+      - npm install
+
+  # ============================================================================
+  # Phase 1: Core Utilities
+  # ============================================================================
+
+  - id: "1.1"
+    description: "Create duration parsing utility"
+    status: "pending"
+    deps:
+      - "0.2"
+    parallel: true
+    context: |
+      Duration strings like "5m", "30s", "1h" are used throughout the config.
+      This utility parses them into milliseconds and validates format.
+    requirements:
+      - Create src/utils/duration.ts
+      - "Function parseDuration(input: string): number (returns milliseconds)"
+      - Support s (seconds), m (minutes), h (hours) suffixes
+      - Throw UserError on invalid format
+      - "Function formatDuration(ms: number): string for display"
+    criteria:
+      - parseDuration('5m') returns 300000
+      - parseDuration('30s') returns 30000
+      - parseDuration('1h') returns 3600000
+      - parseDuration('invalid') throws UserError
+      - Unit tests pass
+    files:
+      - src/utils/duration.ts
+      - test/unit/duration.test.ts
+
+  - id: "1.2"
+    description: "Create logger utility with rotation"
+    status: "pending"
+    deps:
+      - "0.2"
+    parallel: true
+    context: |
+      Logging is used throughout the application. The logger writes to both
+      file (.selfheal/daemon.log) and optionally terminal. Supports log rotation
+      based on file size (10MB max, 5 files).
+    requirements:
+      - Create src/utils/logger.ts
+      - Logger class with debug, info, warn, error methods
+      - "Format: '{ISO8601} [{LEVEL}] {message}'"
+      - "Support verbosity levels via setVerbosity(level: 'quiet' | 'normal' |
+        'verbose')"
+      - "File rotation: rename .log to .log.1, etc., max 5 files, rotate at 10MB"
+      - Support terminal output toggle for foreground/daemon mode
+    criteria:
+      - Logs are written to .selfheal/daemon.log
+      - Log format matches spec
+      - Verbosity filtering works (quiet hides INFO, verbose shows DEBUG)
+      - Rotation occurs at 10MB boundary
+    files:
+      - src/utils/logger.ts
+
+  - id: "1.3"
+    description: "Create hash utility for deduplication"
+    status: "pending"
+    deps:
+      - "0.2"
+    parallel: true
+    context: |
+      Errors are deduplicated by hash: sha256(source + error_type + normalized_message).
+      Message normalization removes timestamps, UUIDs, memory addresses, and collapses whitespace.
+    requirements:
+      - Create src/utils/hash.ts
+      - "Function normalizeMessage(message: string): string"
+      - Remove ISO8601 timestamps, UUIDs, 0x... addresses
+      - Collapse multiple spaces, trim
+      - Preserve case
+      - "Function computeErrorHash(source: string, errorType: string, message:
+        string): string"
+    criteria:
+      - Same error with different timestamps produces same hash
+      - Different error types produce different hashes
+      - Unit tests pass for normalization edge cases
+    files:
+      - src/utils/hash.ts
+      - test/unit/hash.test.ts
+
+  - id: "1.4"
+    description: "Create HTTP client for health checks"
+    status: "pending"
+    deps:
+      - "0.2"
+    parallel: true
+    context: |
+      Health checks make HTTP GET requests expecting 2xx responses.
+      Uses Node.js built-in fetch API (Node 18+).
+    requirements:
+      - Create src/utils/http.ts
+      - "Function checkHealth(url: string, timeout: number): Promise<{success:
+        boolean, status?: number, error?: string}>"
+      - Follow redirects up to 5 hops
+      - Timeout support
+      - "User-Agent: selfheal/1.0"
+    criteria:
+      - "Returns success: true for 2xx responses"
+      - "Returns success: false with status for non-2xx"
+      - Handles timeout correctly
+      - Handles network errors gracefully
+    files:
+      - src/utils/http.ts
+
+  - id: "1.5"
+    description: "Create process utilities for CLI validation and spawn helpers"
+    status: "pending"
+    deps:
+      - "0.2"
+    parallel: true
+    context: |
+      Utilities for checking if CLI commands exist, spawning processes with
+      timeout, and validating PIDs.
+    requirements:
+      - Create src/utils/process.ts
+      - "Function checkCliExists(command: string): CliCheckResult"
+      - "Function spawnWithTimeout(cmd, args, opts, timeout):
+        Promise<SpawnResult>"
+      - "Function isOurProcess(pid: number, expectedRoot: string): boolean"
+      - Handle Windows vs Unix differences
+    criteria:
+      - "checkCliExists returns exists: true for 'node'"
+      - "checkCliExists returns exists: false for non-existent command"
+      - spawnWithTimeout kills process on timeout
+      - isOurProcess validates PID belongs to selfheal
+    files:
+      - src/utils/process.ts
+
+  - id: "1.6"
+    description: "Create error classes and types"
+    status: "pending"
+    deps:
+      - "0.2"
+    parallel: true
+    context: |
+      Custom error classes for user-facing errors vs internal errors.
+      Also defines common types used across the application.
+    requirements:
+      - Create src/utils/errors.ts
+      - class UserError extends Error (user-facing, shown directly)
+      - class InternalError extends Error (logged, wrapped)
+      - Export ErrorStatus type union
+      - Export exit code constants
+    criteria:
+      - UserError instances have name 'UserError'
+      - InternalError supports cause parameter
+      - Exit codes match spec (0, 1, 2, 3, 4, 130)
+    files:
+      - src/utils/errors.ts
+
+  # ============================================================================
+  # Phase 2: Configuration System
+  # ============================================================================
+
+  - id: "2.1"
+    description: "Create Zod schema for configuration validation"
+    status: "pending"
+    deps:
+      - "1.1"
+    parallel: false
+    context: |
+      The configuration is validated using Zod. This includes the full schema
+      from the spec with duration strings, log sources (file/docker/command),
+      agent settings, verification config, etc.
+    requirements:
+      - Create src/config/schema.ts
+      - Define durationSchema with regex validation and max 24h limit
+      - Define fileSourceSchema, dockerSourceSchema, commandSourceSchema
+      - Define logSourceSchema as discriminated union
+      - Define full configSchema with all sections and defaults
+      - Export Config type from zod inference
+    criteria:
+      - Valid config passes validation
+      - Invalid duration strings fail
+      - Missing required fields fail with clear error
+      - Default values are applied
+      - Log source names must be unique
+    files:
+      - src/config/schema.ts
+      - test/unit/config.test.ts
+    context_files:
+      - src/utils/duration.ts
+
+  - id: "2.2"
+    description: "Create configuration loader"
+    status: "pending"
+    deps:
+      - "2.1"
+      - "1.6"
+    parallel: false
+    context: |
+      Loads and validates selfheal.yaml from disk. Resolves paths relative
+      to config file directory. Reports validation errors clearly.
+    requirements:
+      - Create src/config/loader.ts
+      - "Function loadConfig(configPath?: string): Config"
+      - "Default path: ./selfheal.yaml"
+      - Resolve relative paths to config file directory
+      - Validate with Zod schema
+      - Throw UserError with clear messages on failure
+    criteria:
+      - Loads valid config successfully
+      - Reports missing file with actionable message
+      - Reports validation errors with field paths
+      - Relative paths resolved correctly
+    files:
+      - src/config/loader.ts
+    context_files:
+      - src/config/schema.ts
+      - src/utils/errors.ts
+
+  - id: "2.3"
+    description: "Create agent defaults configuration"
+    status: "pending"
+    deps:
+      - "0.2"
+    parallel: true
+    context: |
+      Default command and args for each agent provider (claude, gemini, codex).
+      These are used when only 'provider' is specified in config.
+    requirements:
+      - Create src/config/defaults.ts
+      - Export AGENT_DEFAULTS constant with claude, gemini, codex configs
+      - "Each has: command, args, stderrIsProgress"
+      - Export AGENT_CONFIG_DEFAULTS for timeout (5m) and retries (2)
+    criteria:
+      - Claude default uses '--model sonnet --dangerously-skip-permissions -p'
+      - Gemini default uses '--yolo -p'
+      - Codex default uses 'exec --yolo'
+    files:
+      - src/config/defaults.ts
+
+  # ============================================================================
+  # Phase 3: Database Layer
+  # ============================================================================
+
+  - id: "3.1"
+    description: "Create database wrapper with WAL mode and connection management"
+    status: "pending"
+    deps:
+      - "0.2"
+      - "1.6"
+    parallel: false
+    context: |
+      SQLite database wrapper using better-sqlite3. Configures WAL mode,
+      busy timeout, and provides typed query methods.
+    requirements:
+      - Create src/db/index.ts
+      - class Database with constructor taking path
+      - "Configure: WAL mode, busy_timeout=5000, synchronous=NORMAL"
+      - "Methods: get, all, run, exec, close"
+      - Lazy initialization (create .selfheal/ dir if needed)
+    criteria:
+      - Database file created in .selfheal/
+      - WAL mode enabled (check pragma)
+      - Concurrent reads work
+      - busy_timeout prevents immediate lock failures
+    files:
+      - src/db/index.ts
+    context_files:
+      - src/utils/errors.ts
+
+  - id: "3.2"
+    description: "Create database schema and migrations"
+    status: "pending"
+    deps:
+      - "3.1"
+    parallel: false
+    context: |
+      Define the database schema with tables: errors, watcher_state, activity_log,
+      schema_version. For v1, single schema version with mismatch detection.
+    requirements:
+      - Create src/db/schema.ts
+      - Define SCHEMA_VERSION = 1
+      - SQL for errors table with all columns and indexes
+      - SQL for watcher_state table (singleton)
+      - SQL for activity_log table with indexes
+      - SQL for schema_version table
+      - "Function initializeSchema(db): void"
+      - "Function checkSchemaVersion(db): void (exit code 4 on mismatch)"
+    criteria:
+      - Schema creates all tables and indexes
+      - Schema version is recorded
+      - Version mismatch exits with code 4 and clear message
+    files:
+      - src/db/schema.ts
+    context_files:
+      - src/db/index.ts
+
+  - id: "3.3"
+    description: "Create typed query functions for errors"
+    status: "pending"
+    deps:
+      - "3.2"
+    parallel: false
+    context: |
+      Typed functions for CRUD operations on the errors table.
+      Includes error insertion, status updates, queries by status, etc.
+    requirements:
+      - Create src/db/queries.ts
+      - "Function insertError(db, error): number (returns id)"
+      - "Function getError(db, id): Error | null"
+      - "Function getErrorByHash(db, hash): Error | null"
+      - "Function updateErrorStatus(db, id, status): boolean"
+      - "Function getErrorsByStatus(db, statuses): Error[]"
+      - "Function getPendingErrors(db): Error[]"
+      - "Activity log: logActivity(db, action, errorId?, details?)"
+    criteria:
+      - Insert returns auto-generated ID
+      - Get returns null for missing error
+      - Status update returns false if row not found
+      - Activity log entries are timestamped
+    files:
+      - src/db/queries.ts
+    context_files:
+      - src/db/schema.ts
+
+  - id: "3.4"
+    description: "Create locking utilities"
+    status: "pending"
+    deps:
+      - "3.3"
+      - "1.2"
+    parallel: false
+    context: |
+      Optimistic locking for errors being processed. Lock ID is
+      hostname:pid:timestamp. Locks expire after 10 minutes.
+    requirements:
+      - Create src/fixer/lock.ts
+      - "Function generateLockId(): string"
+      - "Function acquireLock(db, errorId, lockId): Promise<boolean>"
+      - "Function releaseLock(db, errorId, lockId): Promise<void>"
+      - "Function transitionStatus(db, errorId, expected, newStatus, lockId):
+        boolean"
+      - LOCK_TIMEOUT_MS = 10 * 60 * 1000
+      - Clear expired locks during acquisition
+    criteria:
+      - Lock acquisition fails if already locked by another
+      - Lock acquisition succeeds if existing lock expired
+      - Status transition fails if status changed or lock lost
+      - Activity log records lock_acquired, lock_released, lock_expired
+    files:
+      - src/fixer/lock.ts
+      - test/unit/lock.test.ts
+    context_files:
+      - src/db/queries.ts
+      - src/utils/logger.ts
+
+  # ============================================================================
+  # Phase 4: Error Detection
+  # ============================================================================
+
+  - id: "4.1"
+    description: "Create error pattern matching and type extraction"
+    status: "pending"
+    deps:
+      - "1.3"
+    parallel: false
+    context: |
+      Built-in patterns for detecting errors in logs. Includes JavaScript errors,
+      Node.js errors, Python tracebacks, Go panics, Docker errors, database errors.
+      Also extracts error type for display and deduplication.
+    requirements:
+      - Create src/watcher/patterns.ts
+      - BUILTIN_MATCH_PATTERNS array of patterns
+      - BUILTIN_IGNORE_PATTERNS array of patterns
+      - "Function matchesErrorPattern(line: string, customMatch?: string[],
+        customIgnore?: string[]): boolean"
+      - "Function extractErrorType(message: string): string"
+      - Support 'regex:' prefix for custom patterns
+    criteria:
+      - Detects 'TypeError:', 'ECONNREFUSED', 'panic:', etc.
+      - Ignores 'DEBUG', 'INFO' at line start
+      - Custom patterns work (plain string and regex)
+      - Ignore patterns take precedence over match
+      - extractErrorType returns correct type for known patterns
+    files:
+      - src/watcher/patterns.ts
+      - test/unit/parser.test.ts
+
+  - id: "4.2"
+    description: "Create multi-line parser with stack trace handling"
+    status: "pending"
+    deps:
+      - "4.1"
+      - "1.2"
+    parallel: false
+    context: |
+      Parser buffers multi-line stack traces and captures context window
+      (lines before/after error). Continuation patterns detect stack frames.
+      Buffer flushes on new error, non-continuation line, or 100ms timeout.
+    requirements:
+      - Create src/watcher/parser.ts
+      - "class ErrorParser with processLine(event: LogEvent) method"
+      - Buffer continuation lines (at, File, line:col patterns)
+      - Capture context_lines_before and context_lines_after
+      - Flush buffer on timeout (100ms)
+      - Truncate lines > 64KB
+      - Emit parsed errors via callback
+    criteria:
+      - Multi-line stack traces are grouped correctly
+      - Context window captures surrounding lines
+      - After context starts after stack trace ends
+      - Large lines are truncated
+      - Buffer flushes on timeout
+    files:
+      - src/watcher/parser.ts
+    context_files:
+      - src/watcher/patterns.ts
+      - src/utils/logger.ts
+
+  # ============================================================================
+  # Phase 5: Log Source Watchers
+  # ============================================================================
+
+  - id: "5.1"
+    description: "Create log source interface and types"
+    status: "pending"
+    deps:
+      - "0.2"
+    parallel: true
+    context: |
+      Define the interface for log sources. All sources emit LogEvent objects
+      to a central event queue.
+    requirements:
+      - Create src/watcher/sources/types.ts
+      - "interface LogEvent { source: string; line: string; timestamp: Date }"
+      - "interface LogSource { start(): Promise<void>; stop(): Promise<void>;
+        on(event: 'line', handler): void }"
+      - type LogSourceConfig = FileSourceConfig | DockerSourceConfig |
+        CommandSourceConfig
+    criteria:
+      - Types compile without errors
+      - LogEvent has all required fields
+    files:
+      - src/watcher/sources/types.ts
+
+  - id: "5.2"
+    description: "Create file log source with chokidar"
+    status: "pending"
+    deps:
+      - "5.1"
+      - "1.2"
+    parallel: false
+    context: |
+      Watches a file for appended content using chokidar. Handles file rotation
+      (detects truncation), file not existing at start (waits for creation).
+    requirements:
+      - Create src/watcher/sources/file.ts
+      - class FileSource implements LogSource
+      - Use chokidar to watch file
+      - Track file position, detect truncation (size decreased)
+      - Handle file not existing (watch parent dir, wait for creation)
+      - Read new content line by line
+    criteria:
+      - Detects new lines appended to file
+      - Handles file rotation (re-reads from start)
+      - Waits for file creation if not exists
+      - Logs warning when file not found
+    files:
+      - src/watcher/sources/file.ts
+      - test/integration/file-source.test.ts
+    context_files:
+      - src/watcher/sources/types.ts
+      - src/utils/logger.ts
+
+  - id: "5.3"
+    description: "Create Docker log source"
+    status: "pending"
+    deps:
+      - "5.1"
+      - "1.2"
+      - "1.5"
+    parallel: false
+    context: |
+      Streams logs from a Docker container using 'docker logs -f --timestamps'.
+      Handles container restart with exponential backoff reconnection.
+    requirements:
+      - Create src/watcher/sources/docker.ts
+      - class DockerSource implements LogSource
+      - "Spawn: docker logs -f --timestamps --since={lastCheckpoint} {container}"
+      - Parse timestamps from log lines
+      - Reconnect with exponential backoff (1s initial, 60s max)
+      - Track lastCheckpoint for resume
+    criteria:
+      - Streams logs from running container
+      - Reconnects when container restarts
+      - Uses exponential backoff on failure
+      - Parses timestamps correctly
+    files:
+      - src/watcher/sources/docker.ts
+      - test/integration/docker-source.test.ts
+    context_files:
+      - src/watcher/sources/types.ts
+      - src/utils/logger.ts
+      - src/utils/process.ts
+
+  - id: "5.4"
+    description: "Create command log source"
+    status: "pending"
+    deps:
+      - "5.1"
+      - "1.2"
+      - "1.5"
+      - "1.1"
+    parallel: false
+    context: |
+      Executes a command periodically and parses output. Tracks seen line hashes
+      to avoid duplicate detection. Handles large output truncation.
+    requirements:
+      - Create src/watcher/sources/command.ts
+      - class CommandSource implements LogSource
+      - Execute command on interval
+      - Track seen line hashes (in memory)
+      - Truncate output to max_line_buffer (keep most recent)
+      - Wait for current execution before next scheduled run
+    criteria:
+      - Executes command at configured interval
+      - Avoids duplicate lines via hash tracking
+      - Handles command longer than interval
+      - Truncates large output with warning
+    files:
+      - src/watcher/sources/command.ts
+      - test/integration/command-source.test.ts
+    context_files:
+      - src/watcher/sources/types.ts
+      - src/utils/logger.ts
+      - src/utils/process.ts
+      - src/utils/duration.ts
+
+  - id: "5.5"
+    description: "Create watcher orchestrator with event queue"
+    status: "pending"
+    deps:
+      - "5.2"
+      - "5.3"
+      - "5.4"
+      - "4.2"
+      - "3.3"
+    parallel: false
+    context: |
+      Orchestrates multiple log sources, routing events through a serialized
+      queue to the parser. Handles deduplication at the database level.
+    requirements:
+      - Create src/watcher/index.ts
+      - class WatcherOrchestrator
+      - Initialize sources from config
+      - Serial event queue (AsyncQueue or p-queue with concurrency 1)
+      - Route events to ErrorParser
+      - Store detected errors in database
+      - Deduplicate by hash (check status before insert)
+      - Emit events for daemon/UI
+    criteria:
+      - All configured sources start
+      - Events processed serially (no race conditions)
+      - Duplicate errors are dropped (log deduplicated)
+      - New errors inserted with status 'pending'
+      - Activity log records error_detected, error_deduplicated
+    files:
+      - src/watcher/index.ts
+    context_files:
+      - src/watcher/sources/types.ts
+      - src/watcher/parser.ts
+      - src/db/queries.ts
+
+  # ============================================================================
+  # Phase 6: Agent System
+  # ============================================================================
+
+  - id: "6.1"
+    description: "Create agent types and interface"
+    status: "pending"
+    deps:
+      - "0.2"
+    parallel: true
+    context: |
+      Define the Agent interface and related types. Agents execute prompts
+      and return results with stdout, stderr, exit code, timeout status.
+    requirements:
+      - Create src/agents/types.ts
+      - interface AgentConfig with provider, command, args, stderrIsProgress,
+        timeout, retries
+      - interface AgentResult with success, stdout, stderr, exitCode, timedOut,
+        outputFileExists
+      - interface Agent with config, analyze(contextPath), fix(contextPath)
+    criteria:
+      - Types compile without errors
+      - All fields from spec present
+    files:
+      - src/agents/types.ts
+
+  - id: "6.2"
+    description: "Create base agent with spawn/timeout/retry logic"
+    status: "pending"
+    deps:
+      - "6.1"
+      - "1.5"
+      - "1.2"
+      - "2.3"
+    parallel: false
+    context: |
+      BaseAgent implements common execution logic: spawning the CLI with prompt,
+      handling timeout, retrying on failure, checking for output file.
+    requirements:
+      - Create src/agents/base.ts
+      - class BaseAgent implements Agent
+      - "Build command: [config.command, ...config.args, prompt]"
+      - Spawn with cwd set to project root
+      - Handle timeout (SIGTERM, then SIGKILL after 5s)
+      - Retry up to config.retries on failure
+      - Check outputFileExists after execution
+      - Handle stderrIsProgress (stream to terminal in foreground)
+    criteria:
+      - Command is built correctly with prompt appended
+      - Process killed on timeout
+      - Retries occur on failure
+      - Output file existence is checked
+    files:
+      - src/agents/base.ts
+    context_files:
+      - src/agents/types.ts
+      - src/utils/process.ts
+      - src/utils/logger.ts
+      - src/config/defaults.ts
+
+  - id: "6.3"
+    description: "Create agent factory and provider-specific handlers"
+    status: "pending"
+    deps:
+      - "6.2"
+    parallel: false
+    context: |
+      Factory function to create agent based on provider. Provider-specific
+      files exist for future customization but currently use BaseAgent.
+    requirements:
+      - Create src/agents/index.ts with createAgent(config) function
+      - Create src/agents/claude.ts, gemini.ts, codex.ts (can extend BaseAgent)
+      - Apply AGENT_DEFAULTS when command/args not specified
+      - Validate CLI exists on agent creation
+    criteria:
+      - createAgent('claude', {...}) returns working agent
+      - Default args applied when not specified
+      - Throws if CLI not found
+    files:
+      - src/agents/index.ts
+      - src/agents/claude.ts
+      - src/agents/gemini.ts
+      - src/agents/codex.ts
+    context_files:
+      - src/agents/base.ts
+      - src/config/defaults.ts
+
+  # ============================================================================
+  # Phase 7: Context File Generation
+  # ============================================================================
+
+  - id: "7.1"
+    description: "Create context file generator"
+    status: "pending"
+    deps:
+      - "3.3"
+    parallel: false
+    context: |
+      Generates markdown context files for agent analysis and fix phases.
+      Includes error details, instructions, and expected output format.
+    requirements:
+      - Create src/fixer/context.ts
+      - "Function generateAnalyzeContext(error, config, attempt): { path,
+        content }"
+      - "Function generateFixContext(error, analysis, config, attempt): { path,
+        content }"
+      - "Path format:
+        .selfheal/context/{date}-error-{id}-attempt-{attempt}-{phase}.md"
+      - Content matches spec format exactly
+      - Handle size limit (truncate stack trace, then log context)
+      - UTF-8 encoding, replace non-UTF8 chars
+    criteria:
+      - Analyze context includes error details, instructions, output format
+      - Fix context includes previous analysis
+      - Path includes date and attempt number
+      - Large content is truncated within size limit
+    files:
+      - src/fixer/context.ts
+      - test/unit/context.test.ts
+    context_files:
+      - src/db/queries.ts
+
+  - id: "7.2"
+    description: "Create agent output parser and validator"
+    status: "pending"
+    deps:
+      - "0.2"
+    parallel: true
+    context: |
+      Parses YAML output from agents and validates required fields.
+      Analysis output: summary, root_cause, suggested_fix, files_to_modify, confidence.
+      Fix output: success, summary, optional files_changed and notes.
+    requirements:
+      - Create src/fixer/output.ts
+      - "Function parseAnalysisOutput(content: string): AnalysisOutput"
+      - "Function parseFixOutput(content: string): FixOutput"
+      - Validate required fields, throw on missing
+      - Validate confidence is high/medium/low
+    criteria:
+      - Valid analysis YAML parses successfully
+      - Missing required fields throws clear error
+      - Invalid confidence value throws
+      - Unit tests pass with valid and invalid fixtures
+    files:
+      - src/fixer/output.ts
+      - test/unit/agent-output.test.ts
+
+  # ============================================================================
+  # Phase 8: Verification System
+  # ============================================================================
+
+  - id: "8.1"
+    description: "Create verification runner"
+    status: "pending"
+    deps:
+      - "1.4"
+      - "1.5"
+      - "1.1"
+      - "1.2"
+    parallel: false
+    context: |
+      Runs test commands and health checks after fix is applied.
+      Commands run in shell, health checks use HTTP GET.
+    requirements:
+      - Create src/fixer/verifier.ts
+      - "Function runVerification(config): Promise<VerificationResult>"
+      - Wait for wait_after_fix duration
+      - Run test_commands sequentially, stop on first failure
+      - Run health_checks, stop on first failure
+      - Capture command output for logging
+      - Support timeout per command and health check
+    criteria:
+      - Waits before running verification
+      - Commands run in shell (cross-platform)
+      - Stops on first failing command
+      - Health checks expect 2xx
+      - Returns detailed result with failure reason
+    files:
+      - src/fixer/verifier.ts
+      - test/integration/verifier.test.ts
+    context_files:
+      - src/utils/http.ts
+      - src/utils/process.ts
+      - src/utils/duration.ts
+      - src/utils/logger.ts
+
+  # ============================================================================
+  # Phase 9: Fix Pipeline
+  # ============================================================================
+
+  - id: "9.1"
+    description: "Create fix queue manager"
+    status: "pending"
+    deps:
+      - "3.4"
+    parallel: false
+    context: |
+      Manages the queue of errors to fix. In autonomous mode, processes
+      errors FIFO. Ensures only one fix runs at a time.
+    requirements:
+      - Create src/fixer/queue.ts
+      - class FixQueue
+      - "Method getNext(): Error | null (oldest pending/suggested)"
+      - Track fixInProgress flag
+      - Method processQueueIfReady() for autonomous mode
+    criteria:
+      - Returns oldest pending/suggested error
+      - Returns null if queue empty or fix in progress
+      - processQueueIfReady triggers processing when ready
+    files:
+      - src/fixer/queue.ts
+    context_files:
+      - src/fixer/lock.ts
+
+  - id: "9.2"
+    description: "Create fix orchestrator"
+    status: "pending"
+    deps:
+      - "9.1"
+      - "6.3"
+      - "7.1"
+      - "7.2"
+      - "8.1"
+      - "3.4"
+    parallel: false
+    context: |
+      Orchestrates the full fix pipeline: acquire lock, analyze (if needed),
+      fix, verify, update status. Handles failures and retries.
+    requirements:
+      - Create src/fixer/index.ts
+      - class FixOrchestrator
+      - "Method fixError(errorId, options): Promise<FixResult>"
+      - Acquire lock, validate status
+      - Run analysis if pending (or --reanalyze)
+      - Transition to suggested, store analysis
+      - Run fix, transition to fixing
+      - Run verification
+      - Update status based on result (fixed/pending/failed)
+      - Handle phase failures, increment attempts
+      - Release lock on completion
+    criteria:
+      - Full pipeline executes correctly
+      - Lock acquired at start, released at end
+      - Status transitions are correct
+      - Failures increment fix_attempts
+      - Max attempts exceeded sets status to failed
+    files:
+      - src/fixer/index.ts
+    context_files:
+      - src/fixer/queue.ts
+      - src/agents/index.ts
+      - src/fixer/context.ts
+      - src/fixer/output.ts
+      - src/fixer/verifier.ts
+      - src/fixer/lock.ts
+
+  # ============================================================================
+  # Phase 10: Daemon Management
+  # ============================================================================
+
+  - id: "10.1"
+    description: "Create daemon utilities"
+    status: "pending"
+    deps:
+      - "1.5"
+      - "3.3"
+      - "1.6"
+    parallel: false
+    context: |
+      Utilities for daemonizing the process (spawn detached child),
+      signal handling for graceful shutdown, stale status recovery.
+    requirements:
+      - Create src/utils/daemon.ts
+      - "Function daemonize(): number (returns child PID)"
+      - Check platform (exit with error on Windows)
+      - Use --daemon-child internal flag
+      - Function setupSignalHandlers(orchestrator)
+      - Handle SIGTERM, SIGINT, SIGHUP (Unix only)
+      - Wait for in-progress fix on shutdown (30s max)
+      - Function recoverStaleErrors(db)
+    criteria:
+      - Daemon spawns detached child on Unix
+      - Windows exits with helpful error
+      - Signal handlers trigger graceful shutdown
+      - Stale errors recovered at startup
+    files:
+      - src/utils/daemon.ts
+    context_files:
+      - src/utils/process.ts
+      - src/db/queries.ts
+      - src/utils/errors.ts
+
+  # ============================================================================
+  # Phase 11: CLI Commands
+  # ============================================================================
+
+  - id: "11.1"
+    description: "Create CLI entry point and command structure"
+    status: "pending"
+    deps:
+      - "2.2"
+      - "1.6"
+    parallel: false
+    context: |
+      Main CLI entry point using Commander. Sets up global flags and
+      subcommands. Handles errors and sets exit codes.
+    requirements:
+      - Create src/cli/index.ts
+      - Use commander for CLI framework
+      - "Global flags: --config, --verbose, --quiet, --version, --help"
+      - Register all subcommands
+      - Handle UserError (show message, exit 1)
+      - Handle InternalError (log details, show generic message)
+      - Set correct exit codes per spec
+    criteria:
+      - selfheal --help shows all commands
+      - selfheal --version shows version
+      - Global flags work across commands
+      - Exit codes match spec
+    files:
+      - src/cli/index.ts
+    context_files:
+      - src/config/loader.ts
+      - src/utils/errors.ts
+
+  - id: "11.2"
+    description: "Create init command"
+    status: "pending"
+    deps:
+      - "11.1"
+    parallel: false
+    context: |
+      Creates selfheal.yaml with commented template. Sets project.name to
+      current directory name. Appends .selfheal/ to .gitignore.
+    requirements:
+      - Create src/cli/commands/init.ts
+      - Generate selfheal.yaml with comments
+      - Set project.name to current dir name
+      - Set agent.provider to claude (default)
+      - Include example log source configs (commented)
+      - Append .selfheal/ to .gitignore (create if needed)
+      - "Flags: --agent, --force"
+    criteria:
+      - Creates valid selfheal.yaml
+      - Uses --agent flag if provided
+      - Fails if file exists (without --force)
+      - .gitignore updated correctly
+    files:
+      - src/cli/commands/init.ts
+
+  - id: "11.3"
+    description: "Create watch command"
+    status: "pending"
+    deps:
+      - "11.1"
+      - "5.5"
+      - "9.2"
+      - "10.1"
+    parallel: false
+    context: |
+      Starts watching configured log sources. Supports foreground and daemon
+      mode, manual and autonomous mode.
+    requirements:
+      - Create src/cli/commands/watch.ts
+      - Validate config and agent CLI
+      - Check no existing watcher (watcher_state)
+      - "Flags: --daemon, --autonomous"
+      - "Foreground: output to terminal and log"
+      - "Daemon: spawn detached, output to log only"
+      - Store watcher_state on start
+      - In autonomous mode, trigger fix queue processing
+    criteria:
+      - Foreground mode shows output in terminal
+      - Daemon mode spawns background process
+      - watcher_state recorded in database
+      - Cannot start if already running
+    files:
+      - src/cli/commands/watch.ts
+    context_files:
+      - src/watcher/index.ts
+      - src/fixer/index.ts
+      - src/utils/daemon.ts
+
+  - id: "11.4"
+    description: "Create stop command"
+    status: "pending"
+    deps:
+      - "11.1"
+      - "10.1"
+    parallel: false
+    context: |
+      Stops the background watcher. Sends SIGTERM, waits for graceful
+      shutdown, then SIGKILL if needed.
+    requirements:
+      - Create src/cli/commands/stop.ts
+      - Read watcher_state from DB
+      - Validate PID is our process
+      - Send SIGTERM, wait up to 30s
+      - Send SIGKILL if still running
+      - Clear watcher_state
+    criteria:
+      - Stops running daemon
+      - Handles stale state (process doesn't exist)
+      - Reports 'not running' if no watcher
+    files:
+      - src/cli/commands/stop.ts
+    context_files:
+      - src/utils/daemon.ts
+
+  - id: "11.5"
+    description: "Create status command"
+    status: "pending"
+    deps:
+      - "11.1"
+      - "3.3"
+    parallel: false
+    context: |
+      Shows watcher state and error summary. Lists pending/suggested errors.
+    requirements:
+      - Create src/cli/commands/status.ts
+      - Show watcher status (running/not running, mode, uptime)
+      - Show error counts by status
+      - List actionable errors (pending, suggested)
+      - Clean up stale watcher_state if detected
+    criteria:
+      - Shows correct watcher status
+      - Error counts are accurate
+      - Actionable errors listed with ID, type, source, message
+    files:
+      - src/cli/commands/status.ts
+    context_files:
+      - src/db/queries.ts
+
+  - id: "11.6"
+    description: "Create show command"
+    status: "pending"
+    deps:
+      - "11.1"
+      - "3.3"
+    parallel: false
+    context: |
+      Displays full details for an error including metadata, message,
+      stack trace, context, analysis, and fix result.
+    requirements:
+      - Create src/cli/commands/show.ts
+      - Show all error fields from spec
+      - Show analysis if exists (summary, root_cause, suggested_fix, confidence)
+      - Show fix result if exists (success, summary, files_changed)
+      - Show activity log entries for this error
+      - "Flag: --json for JSON output"
+    criteria:
+      - All error details displayed
+      - Analysis and fix result shown if present
+      - JSON output is valid JSON
+    files:
+      - src/cli/commands/show.ts
+    context_files:
+      - src/db/queries.ts
+
+  - id: "11.7"
+    description: "Create fix command"
+    status: "pending"
+    deps:
+      - "11.1"
+      - "9.2"
+    parallel: false
+    context: |
+      Analyzes and fixes a specific error. Supports --all to fix all
+      pending/suggested errors.
+    requirements:
+      - Create src/cli/commands/fix.ts
+      - Check daemon not in autonomous mode
+      - Validate error exists and is fixable
+      - Run analysis if pending (or --reanalyze)
+      - Display analysis summary
+      - Ask for confirmation (unless --yes)
+      - Run fix and verification
+      - Report result
+      - "Flags: --yes, --analyze-only, --reanalyze"
+      - Support --all with --confirm-each option
+    criteria:
+      - Single error fix works end-to-end
+      - --all fixes multiple errors sequentially
+      - Blocks if daemon in autonomous mode
+      - Skips locked errors in --all mode
+    files:
+      - src/cli/commands/fix.ts
+    context_files:
+      - src/fixer/index.ts
+
+  - id: "11.8"
+    description: "Create ignore command"
+    status: "pending"
+    deps:
+      - "11.1"
+      - "3.4"
+    parallel: false
+    context: |
+      Marks an error as ignored. Acquires lock, updates status, releases lock.
+    requirements:
+      - Create src/cli/commands/ignore.ts
+      - Validate error exists and is ignorable (pending, suggested, failed)
+      - Acquire lock
+      - Set status to ignored
+      - Release lock
+    criteria:
+      - Error status changes to ignored
+      - Fails if error locked by another process
+      - Fails if error not found or not ignorable
+    files:
+      - src/cli/commands/ignore.ts
+    context_files:
+      - src/fixer/lock.ts
+
+  - id: "11.9"
+    description: "Create logs command"
+    status: "pending"
+    deps:
+      - "11.1"
+      - "1.2"
+    parallel: false
+    context: |
+      Shows activity log entries. Supports --tail to follow log.
+    requirements:
+      - Create src/cli/commands/logs.ts
+      - Read .selfheal/daemon.log
+      - Show last N lines (default 50)
+      - "Flag: --tail to stream new entries"
+      - "Flag: --lines to set count"
+    criteria:
+      - Shows log entries in correct format
+      - --tail streams new entries
+      - --lines sets count
+    files:
+      - src/cli/commands/logs.ts
+    context_files:
+      - src/utils/logger.ts
+
+  - id: "11.10"
+    description: "Create config validate command"
+    status: "pending"
+    deps:
+      - "11.1"
+      - "2.2"
+      - "6.3"
+    parallel: false
+    context: |
+      Validates selfheal.yaml without starting the watcher.
+    requirements:
+      - Create src/cli/commands/config.ts
+      - Check YAML syntax
+      - Validate against schema
+      - Check agent CLI is installed (report version)
+      - Check log source paths accessible (warning if not)
+      - Report all issues found
+    criteria:
+      - Valid config shows success
+      - Invalid config shows all errors
+      - Agent CLI version reported
+      - Inaccessible paths shown as warning
+    files:
+      - src/cli/commands/config.ts
+    context_files:
+      - src/config/loader.ts
+      - src/agents/index.ts
+
+  - id: "11.11"
+    description: "Create clean command"
+    status: "pending"
+    deps:
+      - "11.1"
+      - "3.3"
+    parallel: false
+    context: |
+      Removes old context files based on cleanup.context_max_age_days.
+      Never deletes files for errors in analyzing/fixing status.
+    requirements:
+      - Create src/cli/commands/clean.ts
+      - Find context files older than max age
+      - Exclude files for errors in analyzing/fixing status
+      - "Flags: --dry-run, --force"
+      - Show what would be removed (dry-run)
+      - Ask for confirmation (unless --force)
+    criteria:
+      - Removes files older than configured age
+      - Protects in-progress error files
+      - --dry-run shows without deleting
+    files:
+      - src/cli/commands/clean.ts
+    context_files:
+      - src/db/queries.ts
+
+  - id: "11.12"
+    description: "Create version command"
+    status: "pending"
+    deps:
+      - "11.1"
+    parallel: false
+    context: |
+      Shows version and environment information. Works without config file.
+    requirements:
+      - Create src/cli/commands/version.ts
+      - Show selfheal version from package.json
+      - Show Node.js version
+      - Show agent if config exists
+      - Show config status (valid, invalid, not found)
+    criteria:
+      - Works without selfheal.yaml
+      - Shows all version info
+      - Shows config validation status
+    files:
+      - src/cli/commands/version.ts
+
+  # ============================================================================
+  # Phase 12: Testing
+  # ============================================================================
+
+  - id: "12.1"
+    description: "Create test fixtures and mock agent"
+    status: "pending"
+    deps:
+      - "0.2"
+    parallel: true
+    context: |
+      Create test fixtures for configs, logs, and agent responses.
+      Mock agent script for E2E tests.
+    requirements:
+      - Create test/fixtures/logs/ with sample log files
+      - Create test/fixtures/configs/ with valid and invalid configs
+      - Create test/fixtures/agent-responses/ with YAML outputs
+      - Create test/helpers/mock-agent.ts
+      - Create test/helpers/test-utils.ts with common utilities
+    criteria:
+      - Mock agent reads context, writes response
+      - Fixtures cover edge cases
+      - test-utils provides temp dir helpers
+    files:
+      - test/fixtures/logs/sample.log
+      - test/fixtures/configs/valid.yaml
+      - test/fixtures/configs/invalid.yaml
+      - test/fixtures/agent-responses/analysis-valid.yaml
+      - test/fixtures/agent-responses/fix-valid.yaml
+      - test/helpers/mock-agent.ts
+      - test/helpers/test-utils.ts
+
+  - id: "12.2"
+    description: "Create integration tests for database"
+    status: "pending"
+    deps:
+      - "3.3"
+      - "12.1"
+    parallel: false
+    context: |
+      Integration tests for database operations, concurrent access, locking.
+    requirements:
+      - Create test/integration/db.test.ts
+      - Test CRUD operations on errors table
+      - Test concurrent read access
+      - Test locking behavior
+      - Test schema initialization
+    criteria:
+      - All database operations tested
+      - Concurrent access works correctly
+      - Tests use temp directories
+    files:
+      - test/integration/db.test.ts
+    context_files:
+      - src/db/index.ts
+      - src/db/queries.ts
+      - test/helpers/test-utils.ts
+
+  - id: "12.3"
+    description: "Create E2E tests for manual flow"
+    status: "pending"
+    deps:
+      - "11.7"
+      - "12.1"
+    parallel: false
+    context: |
+      End-to-end test for manual mode flow: detect → analyze → approve → fix → verify.
+    requirements:
+      - Create test/e2e/manual-flow.test.ts
+      - "Setup: temp dir, config, mock agent"
+      - Inject error into log file
+      - Run watch (foreground, short duration)
+      - Run fix with --yes
+      - Assert status transitions
+      - Assert context files created
+    criteria:
+      - Full manual flow works
+      - Error detected and fixed
+      - Status ends as 'fixed'
+    files:
+      - test/e2e/manual-flow.test.ts
+    context_files:
+      - test/helpers/mock-agent.ts
+      - test/helpers/test-utils.ts
+
+  - id: "12.4"
+    description: "Create E2E tests for autonomous flow"
+    status: "pending"
+    deps:
+      - "11.3"
+      - "12.1"
+    parallel: false
+    context: |
+      End-to-end test for autonomous mode: detect → auto-fix → verify.
+    requirements:
+      - Create test/e2e/autonomous-flow.test.ts
+      - "Setup: temp dir, config with autonomous mode"
+      - Start watch --autonomous (foreground)
+      - Inject error
+      - Wait for fix to complete
+      - Assert auto-fixed without intervention
+    criteria:
+      - Autonomous fix happens automatically
+      - No manual approval needed
+      - Status ends as 'fixed'
+    files:
+      - test/e2e/autonomous-flow.test.ts
+    context_files:
+      - test/helpers/mock-agent.ts
+      - test/helpers/test-utils.ts
+
+  - id: "12.5"
+    description: "Create E2E tests for concurrent fix attempts"
+    status: "pending"
+    deps:
+      - "11.7"
+      - "12.1"
+    parallel: false
+    context: |
+      Test that concurrent fix attempts are handled correctly via locking.
+    requirements:
+      - Create test/e2e/concurrent-fix.test.ts
+      - Start two fix processes for same error
+      - One should acquire lock, other should fail
+      - Assert only one fix runs
+    criteria:
+      - Locking prevents concurrent fixes
+      - Second process gets appropriate error
+    files:
+      - test/e2e/concurrent-fix.test.ts
+    context_files:
+      - test/helpers/test-utils.ts
+
+  - id: "12.6"
+    description: "Create E2E tests for daemon lifecycle"
+    status: "pending"
+    deps:
+      - "11.3"
+      - "11.4"
+      - "12.1"
+    parallel: false
+    context: |
+      Test daemon start, status, stop, signal handling.
+    requirements:
+      - Create test/e2e/daemon-lifecycle.test.ts
+      - Start daemon with --daemon flag
+      - Check status shows running
+      - Stop daemon
+      - Check status shows not running
+      - Test graceful shutdown on SIGTERM
+    criteria:
+      - Daemon starts in background
+      - Stop command terminates daemon
+      - Graceful shutdown works
+    files:
+      - test/e2e/daemon-lifecycle.test.ts
+    context_files:
+      - test/helpers/test-utils.ts
+
+  # ============================================================================
+  # Phase 13: Final Integration
+  # ============================================================================
+
+  - id: "13.1"
+    description: "Final integration and build verification"
+    status: "pending"
+    deps:
+      - "11.12"
+      - "12.6"
+    parallel: false
+    context: |
+      Verify the complete build, run all tests, ensure CLI works end-to-end.
+    requirements:
+      - Run npm run build
+      - Run npm test (all tests pass)
+      - Run npm run lint (no errors)
+      - "Test CLI: selfheal --help, selfheal init, selfheal version"
+      - Verify bin entry point works
+    criteria:
+      - Build completes without errors
+      - All tests pass
+      - Linting passes
+      - CLI commands work from dist/
+    files: []
+    commands:
+      - npm run build
+      - npm test
+      - npm run lint
