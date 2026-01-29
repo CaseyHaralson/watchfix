@@ -291,7 +291,7 @@ const ensureSizeLimit = (options: {
 } => {
   let truncatedLines = 0;
   let beforeLines = options.beforeLines;
-  let afterLines = options.afterLines;
+  const afterLines = options.afterLines;
   let content = options.render(beforeLines, afterLines, truncatedLines);
 
   while (
