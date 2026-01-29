@@ -5,8 +5,8 @@ metadata:
   created_at: "2026-01-28T00:00:00Z"
   created_by: "Discovery-Agent"
   version: "1.1"
-  source_idea: "Build watchfix from specification - a CLI tool that watches
-    logs, detects errors, and dispatches AI agents to fix them"
+  source_idea: "Build watchfix from specification - a CLI tool that watches logs,
+    detects errors, and dispatches AI agents to fix them"
   outcomes:
     - Users can configure watchfix via YAML to watch log sources (file, docker,
       command)
@@ -38,6 +38,8 @@ metadata:
     - SQLite with WAL mode for concurrent access
     - Context files in .watchfix/context/
     - Database at .watchfix/errors.db
+  source_branch: main
+  work_branch: plan/watchfix-cli
 
 steps:
   # ============================================================================
