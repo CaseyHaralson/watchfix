@@ -163,7 +163,7 @@ Flags:
 
 > **Note:** `fix --all` excludes `failed` errors intentionally. Failed errors have exceeded max attempts and should be reviewed individually with `selfheal show <id>` before retrying.
 
-**Interrupt Handling:** SIGINT during `fix --all` cancels the current error's operation (same as `fix <id>`) and exits immediately without processing remaining errors. The interrupted error follows normal stale recovery on next run.
+**Interrupt Handling:** SIGINT during `fix --all` cancels the current error's operation (same as `fix <id>`) and exits immediately without processing remaining errors. The interrupted error follows normal stale recovery on next run. The process exits with code 130 (standard SIGINT exit code).
 
 #### `selfheal show <id>`
 
@@ -360,6 +360,10 @@ const durationSchema = z.string()
     /^\d+[smh]$/,
     'Duration must be a number followed by s, m, or h (e.g., "5m", "30s", "1h")'
   )
+  .refine((val) => {
+    const num = parseInt(val.slice(0, -1), 10);
+    return num > 0;
+  }, 'Duration must be greater than 0')
   .refine((val) => {
     const num = parseInt(val.slice(0, -1), 10);
     const unit = val.slice(-1);
@@ -861,6 +865,9 @@ function buildDockerCommand(container: string, since: Date): [string, string[]] 
 }
 ```
 
+**Initial Checkpoint:** On watcher start, `lastCheckpoint` is set to the watcher's start time. This means logs generated before the watcher started are not processed.
+```
+
 **Reconnection Behavior:**
 
 ```typescript
@@ -901,6 +908,8 @@ Executes a command periodically and parses output. Tracks previously seen lines 
 ```
 
 **Hash Retention:** Seen line hashes are stored in memory and lost on daemon restart. This may cause duplicate error detection for command sources after restart.
+
+**Execution Overlap:** If a command takes longer than the interval to complete, the next scheduled execution waits for the current one to complete. The interval timer resets after each execution completes.
 
 **Large Output Handling:**
 
@@ -1339,6 +1348,8 @@ confidence: high | medium | low
 
 For fix mode, the context includes the previous analysis:
 
+> **Note:** The example below shows the second fix attempt (attempt 1) after the first attempt (attempt 0) failed verification.
+
 ```markdown
 # Self-Heal Task
 
@@ -1493,7 +1504,7 @@ Context files are cleaned based on age:
 
 The date prefix is the date the context file is created (not when the error was detected). For retries, a new context file is created with the current date and incremented attempt number. Old context files for the same error remain until cleaned by age.
 
-> **Size Limit:** Context files are limited to 256KB. If content exceeds this:
+> **Size Limit:** Context files are limited to `cleanup.context_max_size_kb` (default: 256KB). If content exceeds this:
 > 1. First, truncate the stack trace to 32KB maximum, keeping the first and last 16KB with `[...truncated...]` in between
 > 2. If still over limit, remove lines from the **beginning** of the raw log (oldest context first)
 > 3. Insert at the start: `[...{N} lines truncated due to size limit...]`
@@ -1890,7 +1901,7 @@ function daemonize(): number {
 }
 ```
 
-The `--daemon-child` flag (internal, hidden from help) indicates the process is the daemon child and should not re-daemonize.
+The `--daemon-child` flag (internal, hidden from help) indicates the process is the daemon child and should not re-daemonize. If the user passes `--daemon-child` manually (without the `SELFHEAL_DAEMON` env var set), exit with an error: `"Internal flag --daemon-child cannot be used directly."`
 
 ### Stopping the Daemon
 
@@ -1964,13 +1975,15 @@ function isOurProcess(pid: number, expectedRoot: string): boolean {
       );
     }
     
-    return cmdline.includes('selfheal') && 
+    return cmdline.includes('selfheal') &&
            cmdline.includes(expectedRoot);
   } catch {
     return false; // Process doesn't exist or can't read cmdline
   }
 }
 ```
+
+> **Note:** On newer Windows versions where `wmic` is unavailable, fall back to PowerShell: `powershell -Command "(Get-Process -Id ${pid}).CommandLine"`
 
 ### Signal Handling
 
