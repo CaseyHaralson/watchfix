@@ -890,7 +890,7 @@ steps:
 
   - id: "7.1"
     description: "Create context file generator"
-    status: "pending"
+    status: "complete"
     deps:
       - "3.3"
     parallel: false
@@ -922,6 +922,7 @@ steps:
     context_files:
       - src/db/queries.ts
       - spec/sections/context-files.md
+    agent: codex
 
   - id: "7.2"
     description: "Create agent output parser and validator"
