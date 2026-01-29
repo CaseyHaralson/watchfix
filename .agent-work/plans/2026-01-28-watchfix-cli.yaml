@@ -1086,7 +1086,7 @@ steps:
 
   - id: "10.1"
     description: "Create daemon utilities"
-    status: "pending"
+    status: "complete"
     deps:
       - "1.5"
       - "3.3"
@@ -1118,6 +1118,7 @@ steps:
       - src/db/queries.ts
       - src/utils/errors.ts
       - spec/sections/locking.md
+    agent: codex
 
   # ============================================================================
   # Phase 11: CLI Commands
