@@ -2,7 +2,7 @@
 
 ## Log File
 
-All watcher activity logged to `.selfheal/daemon.log`.
+All watcher activity logged to `.watchfix/daemon.log`.
 
 ## Format
 
@@ -59,7 +59,7 @@ Rotation behavior:
 
 Result:
 ```
-.selfheal/
+.watchfix/
 ├── daemon.log        # Current (< 10MB)
 ├── daemon.log.1      # Previous
 ├── daemon.log.2

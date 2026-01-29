@@ -2,10 +2,10 @@
 
 ## Configuration
 
-SQLite database at `.selfheal/errors.db`:
+SQLite database at `.watchfix/errors.db`:
 
 ```typescript
-const db = new Database('.selfheal/errors.db');
+const db = new Database('.watchfix/errors.db');
 db.pragma('journal_mode = WAL');      // Write-ahead logging for concurrent reads
 db.pragma('busy_timeout = 5000');     // Wait up to 5s for locks
 db.pragma('synchronous = NORMAL');    // Balance durability and performance

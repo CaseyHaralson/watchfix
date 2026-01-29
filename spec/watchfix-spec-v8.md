@@ -1,4 +1,4 @@
-# selfheal v8 Specification
+# watchfix v8 Specification
 
 A TypeScript CLI tool that watches project logs, detects errors, and uses AI coding agents to analyze and fix them. Agent-agnostic: supports Claude Code, Gemini CLI, and OpenAI Codex.
 
@@ -27,7 +27,7 @@ A TypeScript CLI tool that watches project logs, detects errors, and uses AI cod
 
 ## Overview
 
-selfheal monitors application logs, detects errors using pattern matching, and dispatches them to an AI coding agent for analysis and automated fixes. It operates in two modes:
+watchfix monitors application logs, detects errors using pattern matching, and dispatches them to an AI coding agent for analysis and automated fixes. It operates in two modes:
 
 - **Manual mode**: Errors queue for human review; fixes require explicit approval
 - **Autonomous mode**: Errors are automatically analyzed and fixed without intervention
@@ -49,27 +49,27 @@ selfheal monitors application logs, detects errors using pattern matching, and d
 
 | Command | Description |
 |---------|-------------|
-| `selfheal init` | Create `selfheal.yaml` in current directory |
-| `selfheal watch` | Watch logs in foreground |
-| `selfheal watch --daemon` | Watch logs in background (Linux/macOS only) |
-| `selfheal watch --autonomous` | Auto-fix errors without approval |
-| `selfheal stop` | Stop background watcher |
-| `selfheal status` | Show watcher state and pending errors |
-| `selfheal show <id>` | Show full error details and analysis |
-| `selfheal fix <id>` | Analyze and fix specific error |
-| `selfheal fix --all` | Fix all pending/suggested errors (sequentially) |
-| `selfheal ignore <id>` | Mark error as ignored |
-| `selfheal logs` | Show activity log |
-| `selfheal logs --tail` | Follow activity log |
-| `selfheal config validate` | Validate configuration file |
-| `selfheal clean` | Remove old context files |
-| `selfheal version` | Show version information |
+| `watchfix init` | Create `watchfix.yaml` in current directory |
+| `watchfix watch` | Watch logs in foreground |
+| `watchfix watch --daemon` | Watch logs in background (Linux/macOS only) |
+| `watchfix watch --autonomous` | Auto-fix errors without approval |
+| `watchfix stop` | Stop background watcher |
+| `watchfix status` | Show watcher state and pending errors |
+| `watchfix show <id>` | Show full error details and analysis |
+| `watchfix fix <id>` | Analyze and fix specific error |
+| `watchfix fix --all` | Fix all pending/suggested errors (sequentially) |
+| `watchfix ignore <id>` | Mark error as ignored |
+| `watchfix logs` | Show activity log |
+| `watchfix logs --tail` | Follow activity log |
+| `watchfix config validate` | Validate configuration file |
+| `watchfix clean` | Remove old context files |
+| `watchfix version` | Show version information |
 
 ### Global Flags
 
 | Flag | Description |
 |------|-------------|
-| `--config`, `-c <path>` | Use alternate config file (default: `./selfheal.yaml`) |
+| `--config`, `-c <path>` | Use alternate config file (default: `./watchfix.yaml`) |
 | `--verbose` | Increase output verbosity |
 | `--quiet`, `-q` | Suppress non-essential output |
 | `--version`, `-v` | Show version and exit |
@@ -88,21 +88,21 @@ selfheal monitors application logs, detects errors using pattern matching, and d
 
 ### Command Details
 
-#### `selfheal init`
+#### `watchfix init`
 
-Creates `selfheal.yaml` with a commented template:
+Creates `watchfix.yaml` with a commented template:
 - Sets `project.name` to the current directory name
 - Sets `agent.provider` to `claude` (most common)
 - Includes example log source configurations (commented out)
-- Appends `.selfheal/` to `.gitignore` if not already present (creates file if needed)
+- Appends `.watchfix/` to `.gitignore` if not already present (creates file if needed)
 
 The generated file includes comments explaining each option. Users edit the file to configure their specific log sources and agent provider.
 
 Flags:
 - `--agent <provider>`: Set initial agent provider (claude, gemini, codex)
-- `--force`: Overwrite existing `selfheal.yaml`
+- `--force`: Overwrite existing `watchfix.yaml`
 
-#### `selfheal watch`
+#### `watchfix watch`
 
 Starts watching configured log sources. Behavior:
 
@@ -115,9 +115,9 @@ Starts watching configured log sources. Behavior:
 
 On Windows, `--daemon` exits with an error message directing users to use foreground mode or a process manager like PM2.
 
-> **Note:** The daemon reads configuration once at startup. To apply config changes, run `selfheal stop` and restart with `selfheal watch`.
+> **Note:** The daemon reads configuration once at startup. To apply config changes, run `watchfix stop` and restart with `watchfix watch`.
 
-#### `selfheal fix <id>`
+#### `watchfix fix <id>`
 
 1. Checks if daemon is running in autonomous mode (blocks with error if so)
 2. Validates error exists and is in fixable state (`pending`, `suggested`, or `failed`)
@@ -139,13 +139,13 @@ Flags:
 - The failure is logged but does not count against `fix_attempts`
 - User can retry with `--reanalyze` or proceed with the existing analysis using `fix <id>` without the flag
 
-When `--analyze-only` is used, the error is left in `suggested` status after analysis completes, and the lock is released. A subsequent `selfheal fix <id>` will skip analysis and proceed directly to the fix phase.
+When `--analyze-only` is used, the error is left in `suggested` status after analysis completes, and the lock is released. A subsequent `watchfix fix <id>` will skip analysis and proceed directly to the fix phase.
 
 **Attempt Number Handling:** When fixing a `suggested` error (skipping analysis), the result file uses the current `fix_attempts` value as the attempt number. The analysis is read from the `suggestion` column in the database (stored as JSON from the previous analysis phase) and embedded in the fix context file under "Previous Analysis".
 
 **Interrupt Handling:** For interactive commands (`fix`, `fix --all`), SIGINT cancels the current operation. If an agent is running, it receives SIGTERM. The error remains in its current status (`analyzing` or `fixing`) and the lock is released. On next attempt, stale recovery will reset it to `pending`.
 
-#### `selfheal fix --all`
+#### `watchfix fix --all`
 
 Fixes all `pending` and `suggested` errors sequentially:
 - Checks if daemon is running in autonomous mode (blocks with error if so, same as `fix <id>`)
@@ -153,7 +153,7 @@ Fixes all `pending` and `suggested` errors sequentially:
 - Does NOT stop on failure (continues to next error)
 - Skips errors that fail to acquire lock (being processed elsewhere)
 - Skips errors in `analyzing` or `fixing` status
-- Each error follows the same fix logic as `selfheal fix <id>`
+- Each error follows the same fix logic as `watchfix fix <id>`
 - Reports summary at end showing: fixed count, failed count, skipped count
 
 Flags:
@@ -161,11 +161,11 @@ Flags:
 - `--analyze-only`: Analyze all pending errors without applying fixes
 - `--reanalyze`: Force re-run analysis for all errors, even those already in `suggested` status
 
-> **Note:** `fix --all` excludes `failed` errors intentionally. Failed errors have exceeded max attempts and should be reviewed individually with `selfheal show <id>` before retrying.
+> **Note:** `fix --all` excludes `failed` errors intentionally. Failed errors have exceeded max attempts and should be reviewed individually with `watchfix show <id>` before retrying.
 
 **Interrupt Handling:** SIGINT during `fix --all` cancels the current error's operation (same as `fix <id>`) and exits immediately without processing remaining errors. The interrupted error follows normal stale recovery on next run. The process exits with code 130 (standard SIGINT exit code).
 
-#### `selfheal show <id>`
+#### `watchfix show <id>`
 
 Displays full details for an error:
 - Error metadata: id, type, source, timestamp, status, fix_attempts
@@ -178,7 +178,7 @@ Displays full details for an error:
 Flags:
 - `--json`: Output as JSON (for scripting)
 
-#### `selfheal ignore <id>`
+#### `watchfix ignore <id>`
 
 Marks an error as ignored:
 1. Validates error exists and is in ignorable state (`pending`, `suggested`, or `failed`)
@@ -186,11 +186,11 @@ Marks an error as ignored:
 3. Sets status to `ignored`
 4. Releases lock
 
-Ignored errors are not processed by autonomous mode and don't appear in `selfheal status` actionable list.
+Ignored errors are not processed by autonomous mode and don't appear in `watchfix status` actionable list.
 
-#### `selfheal config validate`
+#### `watchfix config validate`
 
-Validates `selfheal.yaml` without starting the watcher:
+Validates `watchfix.yaml` without starting the watcher:
 - Checks YAML syntax
 - Validates against schema
 - Validates agent CLI is installed (reports version)
@@ -199,19 +199,19 @@ Validates `selfheal.yaml` without starting the watcher:
 - Reports all issues found
 
 ```bash
-$ selfheal config validate
+$ watchfix config validate
 ✓ Config syntax valid
 ✓ Agent CLI found: claude (v1.2.3)
 ⚠ Log source 'backend': file does not exist (will wait for creation)
 ✓ Config valid
 ```
 
-#### `selfheal clean`
+#### `watchfix clean`
 
 Removes old context files based on `cleanup.context_max_age_days` config:
 
 ```bash
-$ selfheal clean
+$ watchfix clean
 Removing context files older than 7 days...
 Removed 23 files (1.2 MB)
 ```
@@ -222,7 +222,7 @@ Flags:
 
 **Safety:** Context files for errors currently in `analyzing` or `fixing` status are never deleted, regardless of age.
 
-#### `selfheal logs`
+#### `watchfix logs`
 
 Shows activity log entries.
 
@@ -231,8 +231,8 @@ Flags:
 - `--lines`, `-n <count>`: Number of lines to show (default: 50)
 
 ```bash
-$ selfheal logs -n 20
-$ selfheal logs --tail
+$ watchfix logs -n 20
+$ watchfix logs --tail
 ```
 
 Output format matches `daemon.log` exactly:
@@ -242,21 +242,21 @@ Output format matches `daemon.log` exactly:
 
 When `--tail` is used, new entries are streamed as they are written to the log file.
 
-#### `selfheal version`
+#### `watchfix version`
 
 Shows version and environment information. This command works without a config file.
 
 ```bash
 # With valid config:
-$ selfheal version
-selfheal v1.0.0
+$ watchfix version
+watchfix v1.0.0
 Node.js v20.10.0
 Agent: claude (Claude Code v1.2.3)
-Config: selfheal.yaml (valid)
+Config: watchfix.yaml (valid)
 
 # Without config:
-$ selfheal version
-selfheal v1.0.0
+$ watchfix version
+watchfix v1.0.0
 Node.js v20.10.0
 Config: not found
 ```
@@ -269,7 +269,7 @@ If a config file exists but is invalid, show the validation errors.
 
 ### Path Resolution
 
-All relative paths in `selfheal.yaml` are resolved relative to the directory containing the config file. When using `--config` to specify an alternate location, paths are still relative to that config file's directory, not the current working directory.
+All relative paths in `watchfix.yaml` are resolved relative to the directory containing the config file. When using `--config` to specify an alternate location, paths are still relative to that config file's directory, not the current working directory.
 
 ### Duration Strings
 
@@ -283,7 +283,7 @@ Examples: `5s`, `10m`, `1h`, `90s`
 ### Complete Schema
 
 ```yaml
-# selfheal.yaml
+# watchfix.yaml
 
 project:
   name: my-app                    # Project identifier (used in logs)
@@ -549,8 +549,8 @@ function buildCommand(config: AgentConfig, prompt: string): [string, string[]] {
 // Example for Claude:
 // command: "claude"
 // args: ["--model", "sonnet", "--dangerously-skip-permissions", "-p"]
-// prompt: "Read .selfheal/context/2025-01-27-error-1-attempt-0.md and follow the instructions."
-// Result: claude --model sonnet --dangerously-skip-permissions -p "Read .selfheal/context/..."
+// prompt: "Read .watchfix/context/2025-01-27-error-1-attempt-0.md and follow the instructions."
+// Result: claude --model sonnet --dangerously-skip-permissions -p "Read .watchfix/context/..."
 ```
 
 **Working Directory:** The agent process is spawned with `cwd` set to the project root (resolved from `project.root` in config). All paths in context files are relative to this directory.
@@ -568,8 +568,8 @@ const PROMPTS = {
 };
 
 // Example contextPath values:
-// - Analysis: .selfheal/context/2025-01-27-error-1-attempt-0-analyze.md
-// - Fix: .selfheal/context/2025-01-27-error-1-attempt-0-fix.md
+// - Analysis: .watchfix/context/2025-01-27-error-1-attempt-0-analyze.md
+// - Fix: .watchfix/context/2025-01-27-error-1-attempt-0-fix.md
 ```
 
 The context file contains all necessary details including mode, error information, and output file path.
@@ -764,7 +764,7 @@ async function handleAnalysisSuccess(
 
 ### CLI Validation
 
-On `selfheal init` or first `selfheal watch`, validate the agent CLI exists:
+On `watchfix init` or first `watchfix watch`, validate the agent CLI exists:
 
 ```typescript
 interface CliCheckResult {
@@ -1028,7 +1028,7 @@ Ignore patterns take precedence: if both a match and ignore pattern are found, t
 
 ### Custom Patterns
 
-From `selfheal.yaml`:
+From `watchfix.yaml`:
 
 ```yaml
 patterns:
@@ -1255,7 +1255,7 @@ The agent receives instructions via context files, avoiding command-line size li
 #### Directory Structure
 
 ```
-.selfheal/
+.watchfix/
 ├── errors.db
 ├── daemon.log
 ├── daemon.log.1          # Rotated logs
@@ -1274,10 +1274,10 @@ Context files are written and read using UTF-8 encoding. Non-UTF8 characters in 
 
 #### Context File Format (Analysis Phase)
 
-`.selfheal/context/{date}-error-{id}-attempt-{attempt}-analyze.md`:
+`.watchfix/context/{date}-error-{id}-attempt-{attempt}-analyze.md`:
 
 ```markdown
-# Self-Heal Task
+# WatchFix Task
 
 ## Mode
 analyze
@@ -1318,7 +1318,7 @@ ECONNREFUSED 127.0.0.1:5432
 3. Determine what files need to be modified
 4. Assess your confidence in the fix
 
-Write your analysis to: `.selfheal/context/2025-01-27-error-1-attempt-0-analysis.yaml`
+Write your analysis to: `.watchfix/context/2025-01-27-error-1-attempt-0-analysis.yaml`
 
 Use this exact YAML format:
 ```yaml
@@ -1344,14 +1344,14 @@ confidence: high | medium | low
 
 #### Context File Format (Fix Phase)
 
-`.selfheal/context/{date}-error-{id}-attempt-{attempt}-fix.md`:
+`.watchfix/context/{date}-error-{id}-attempt-{attempt}-fix.md`:
 
 For fix mode, the context includes the previous analysis:
 
 > **Note:** The example below shows the second fix attempt (attempt 1) after the first attempt (attempt 0) failed verification.
 
 ```markdown
-# Self-Heal Task
+# WatchFix Task
 
 ## Mode
 fix
@@ -1393,7 +1393,7 @@ confidence: high
 3. Follow existing code style and conventions
 4. Make minimal, targeted changes
 
-Write your results to: `.selfheal/context/2025-01-27-error-1-attempt-1-result.yaml`
+Write your results to: `.watchfix/context/2025-01-27-error-1-attempt-1-result.yaml`
 
 Use this exact YAML format:
 ```yaml
@@ -1416,7 +1416,7 @@ notes: |
 
 #### Output Formats
 
-**Analysis output** (`.selfheal/context/{date}-error-{id}-attempt-{attempt}-analysis.yaml`):
+**Analysis output** (`.watchfix/context/{date}-error-{id}-attempt-{attempt}-analysis.yaml`):
 
 ```yaml
 summary: PostgreSQL container not starting due to port conflict
@@ -1434,7 +1434,7 @@ confidence: high
 
 Required fields: `summary`, `root_cause`, `suggested_fix`, `files_to_modify`, `confidence`
 
-**Fix result** (`.selfheal/context/{date}-error-{id}-attempt-{attempt}-result.yaml`):
+**Fix result** (`.watchfix/context/{date}-error-{id}-attempt-{attempt}-result.yaml`):
 
 ```yaml
 success: true
@@ -1498,8 +1498,8 @@ Context files are cleaned based on age:
 
 - Files are named with date, attempt, and phase: `2025-01-27-error-1-attempt-0-analyze.md`, `2025-01-27-error-1-attempt-0-fix.md`
 - `cleanup.context_max_age_days` controls retention (default: 7 days)
-- `selfheal clean` removes files older than the configured age
-- `selfheal clean --dry-run` shows what would be removed
+- `watchfix clean` removes files older than the configured age
+- `watchfix clean --dry-run` shows what would be removed
 - Context files for errors in `analyzing` or `fixing` status are **never deleted**, regardless of age (this includes both `-analyze.md` and `-fix.md` files for the error)
 
 The date prefix is the date the context file is created (not when the error was detected). For retries, a new context file is created with the current date and incremented attempt number. Old context files for the same error remain until cleaned by age.
@@ -1528,7 +1528,7 @@ After a fix is applied:
 3. **Health checks**: HTTP GET each URL in `health_checks`
    - Expect 2xx response (200-299)
    - Follows redirects (up to 5 hops). If the 5th response is still a redirect, treat as failure with message "Too many redirects"
-   - Sends `User-Agent: selfheal/1.0` header
+   - Sends `User-Agent: watchfix/1.0` header
    - Does not send request body
    - Timeout: `health_check_timeout` (default: 10s) per check
    - Stop on first failure
@@ -1584,16 +1584,16 @@ When verification fails:
 
 ## Storage
 
-All data stored in `.selfheal/` in project root.
+All data stored in `.watchfix/` in project root.
 
-> **Initialization Timing:** The `.selfheal/` directory and `errors.db` database are created lazily on first command that requires them (`watch`, `status`, `fix`, `show`, `logs`, `clean`). The `init` command only creates `selfheal.yaml`.
+> **Initialization Timing:** The `.watchfix/` directory and `errors.db` database are created lazily on first command that requires them (`watch`, `status`, `fix`, `show`, `logs`, `clean`). The `init` command only creates `watchfix.yaml`.
 
 ### Database Configuration
 
-SQLite database at `.selfheal/errors.db`:
+SQLite database at `.watchfix/errors.db`:
 
 ```typescript
-const db = new Database('.selfheal/errors.db');
+const db = new Database('.watchfix/errors.db');
 db.pragma('journal_mode = WAL');      // Write-ahead logging for concurrent reads
 db.pragma('busy_timeout = 5000');     // Wait up to 5s for locks
 db.pragma('synchronous = NORMAL');    // Balance durability and performance
@@ -1617,13 +1617,13 @@ Error: Database schema version mismatch.
   Expected: 1
   Found: {actual_version}
 
-This database was created by a different version of selfheal.
+This database was created by a different version of watchfix.
 To resolve:
-  1. Back up .selfheal/errors.db
-  2. Delete .selfheal/errors.db
-  3. Restart selfheal (a new database will be created)
+  1. Back up .watchfix/errors.db
+  2. Delete .watchfix/errors.db
+  3. Restart watchfix (a new database will be created)
 
-Note: This will clear error history. Alternatively, downgrade/upgrade selfheal to match the database version.
+Note: This will clear error history. Alternatively, downgrade/upgrade watchfix to match the database version.
 ```
 
 Future versions will implement proper migrations.
@@ -1755,7 +1755,7 @@ CREATE INDEX idx_activity_log_error_id ON activity_log(error_id);
 
 Multiple processes may try to fix the same error:
 - Daemon running in autonomous mode
-- User running `selfheal fix <id>`
+- User running `watchfix fix <id>`
 - Multiple terminal sessions
 
 ### Solution: Optimistic Locking
@@ -1867,7 +1867,7 @@ Locks expire after 10 minutes to handle crashed processes:
 
 ### Starting the Daemon
 
-`selfheal watch --daemon` (Linux/macOS only):
+`watchfix watch --daemon` (Linux/macOS only):
 
 1. Validate config and agent CLI
 2. Check platform (exit with error on Windows)
@@ -1881,8 +1881,8 @@ function daemonize(): number {
   if (process.platform === 'win32') {
     throw new UserError(
       'Daemon mode is not supported on Windows.\n' +
-      'Use foreground mode: selfheal watch --autonomous\n' +
-      'Or use a process manager like PM2: pm2 start selfheal -- watch --autonomous'
+      'Use foreground mode: watchfix watch --autonomous\n' +
+      'Or use a process manager like PM2: pm2 start watchfix -- watch --autonomous'
     );
   }
   
@@ -1893,7 +1893,7 @@ function daemonize(): number {
     detached: true,
     stdio: ['ignore', 'ignore', 'ignore'],
     cwd: process.cwd(),
-    env: { ...process.env, SELFHEAL_DAEMON: '1' },
+    env: { ...process.env, WATCHFIX_DAEMON: '1' },
   });
   
   child.unref();
@@ -1901,11 +1901,11 @@ function daemonize(): number {
 }
 ```
 
-The `--daemon-child` flag (internal, hidden from help) indicates the process is the daemon child and should not re-daemonize. If the user passes `--daemon-child` manually (without the `SELFHEAL_DAEMON` env var set), exit with an error: `"Internal flag --daemon-child cannot be used directly."`
+The `--daemon-child` flag (internal, hidden from help) indicates the process is the daemon child and should not re-daemonize. If the user passes `--daemon-child` manually (without the `WATCHFIX_DAEMON` env var set), exit with an error: `"Internal flag --daemon-child cannot be used directly."`
 
 ### Stopping the Daemon
 
-`selfheal stop`:
+`watchfix stop`:
 
 1. Read watcher_state from DB
 2. If no state: report "not running"
@@ -1960,7 +1960,7 @@ function isOurProcess(pid: number, expectedRoot: string): boolean {
     // Check if process exists
     process.kill(pid, 0);
     
-    // Verify it's a selfheal process for this project
+    // Verify it's a watchfix process for this project
     let cmdline: string;
     
     if (process.platform === 'win32') {
@@ -1975,7 +1975,7 @@ function isOurProcess(pid: number, expectedRoot: string): boolean {
       );
     }
     
-    return cmdline.includes('selfheal') &&
+    return cmdline.includes('watchfix') &&
            cmdline.includes(expectedRoot);
   } catch {
     return false; // Process doesn't exist or can't read cmdline
@@ -2079,7 +2079,7 @@ Call `recoverStaleErrors()` at daemon startup before starting watchers. This ens
 
 ### Manual Fix with Daemon Running
 
-When running `selfheal fix <id>` while a daemon is running:
+When running `watchfix fix <id>` while a daemon is running:
 
 ```typescript
 async function checkDaemonConflict(): Promise<void> {
@@ -2097,7 +2097,7 @@ async function checkDaemonConflict(): Promise<void> {
     throw new UserError(
       'Cannot run manual fix while daemon is in autonomous mode.\n' +
       'The daemon will automatically fix errors.\n' +
-      "Run 'selfheal stop' first if you want manual control."
+      "Run 'watchfix stop' first if you want manual control."
     );
   }
   
@@ -2109,7 +2109,7 @@ async function checkDaemonConflict(): Promise<void> {
 
 ### Status Check
 
-`selfheal status`:
+`watchfix status`:
 
 ```typescript
 async function showStatus(): Promise<void> {
@@ -2171,7 +2171,7 @@ async function showStatus(): Promise<void> {
 
 ### Log File
 
-All watcher activity logged to `.selfheal/daemon.log`.
+All watcher activity logged to `.watchfix/daemon.log`.
 
 Format:
 ```
@@ -2223,7 +2223,7 @@ Rotation behavior:
 4. Create new `daemon.log`
 
 ```
-.selfheal/
+.watchfix/
 ├── daemon.log        # Current (< 10MB)
 ├── daemon.log.1      # Previous
 ├── daemon.log.2
@@ -2237,7 +2237,7 @@ Rotation behavior:
 ## Project Structure
 
 ```
-selfheal/
+watchfix/
 ├── src/
 │   ├── cli/
 │   │   ├── index.ts              # Entry point, commander setup
@@ -2390,13 +2390,13 @@ Full workflow tests with mock agent:
 
 ```typescript
 // test/helpers/mock-agent.ts
-// Invoked as: node mock-agent.js "Read .selfheal/context/..."
+// Invoked as: node mock-agent.js "Read .watchfix/context/..."
 
 const prompt = process.argv[2];
 
 // Extract context file path from prompt
-// Pattern: .selfheal/context/2025-01-27-error-1-attempt-0-analyze.md
-const contextPath = prompt.match(/\.selfheal\/context\/[^\s]+/)?.[0];
+// Pattern: .watchfix/context/2025-01-27-error-1-attempt-0-analyze.md
+const contextPath = prompt.match(/\.watchfix\/context\/[^\s]+/)?.[0];
 if (!contextPath) {
   console.error('No context path found in prompt');
   process.exit(1);
@@ -2474,8 +2474,8 @@ class InternalError extends Error {
 
 ### Missing Configuration
 
-When any command except `init` is run without a `selfheal.yaml`:
-- Exit with code 1 and message: `"No selfheal.yaml found in current directory. Run 'selfheal init' to create one."`
+When any command except `init` is run without a `watchfix.yaml`:
+- Exit with code 1 and message: `"No watchfix.yaml found in current directory. Run 'watchfix init' to create one."`
 
 ### User-Facing Error Messages
 
@@ -2490,23 +2490,23 @@ Error: Config validation failed:
   - logs.sources[0]: 'interval' is required for command source type
 
 Error: Cannot start watcher: already running (PID 12345)
-  Run 'selfheal stop' first, or 'selfheal status' to check state
+  Run 'watchfix stop' first, or 'watchfix status' to check state
 
 Error: Cannot run manual fix while daemon is in autonomous mode.
   The daemon will automatically fix errors.
-  Run 'selfheal stop' first if you want manual control.
+  Run 'watchfix stop' first if you want manual control.
 
 Error: Error #5 is currently being processed by another process.
-  Wait for it to complete or check 'selfheal status'.
+  Wait for it to complete or check 'watchfix status'.
 
 Error: Agent did not produce expected output after 3 attempts.
-  Check .selfheal/daemon.log for details.
+  Check .watchfix/daemon.log for details.
 
 Error: Error #42 not found.
 
 Error: Daemon mode is not supported on Windows.
-  Use foreground mode: selfheal watch --autonomous
-  Or use a process manager like PM2: pm2 start selfheal -- watch --autonomous
+  Use foreground mode: watchfix watch --autonomous
+  Or use a process manager like PM2: pm2 start watchfix -- watch --autonomous
 ```
 
 ### Internal Error Logging
@@ -2523,7 +2523,7 @@ try {
   });
   
   throw new UserError(
-    `Analysis failed: ${err.message}\nCheck .selfheal/daemon.log for details`
+    `Analysis failed: ${err.message}\nCheck .watchfix/daemon.log for details`
   );
 }
 ```
@@ -2551,27 +2551,27 @@ try {
 ### Manual Mode
 
 ```bash
-$ selfheal init
-✓ Created selfheal.yaml
-✓ Added .selfheal/ to .gitignore
+$ watchfix init
+✓ Created watchfix.yaml
+✓ Added .watchfix/ to .gitignore
 
-Edit selfheal.yaml to configure your log sources and agent provider.
+Edit watchfix.yaml to configure your log sources and agent provider.
 
-$ vi selfheal.yaml  # Configure log sources
+$ vi watchfix.yaml  # Configure log sources
 
-$ selfheal config validate
+$ watchfix config validate
 ✓ Config syntax valid
 ✓ Agent CLI found: claude (v1.2.3)
 ✓ All log sources accessible
 ✓ Config valid
 
-$ selfheal watch
+$ watchfix watch
 [10:30:00] Watcher started (manual mode)
 [10:30:00] Watching: backend (file: ./logs/backend.log)
 [10:30:15] 🔴 Error #1: ConnectionError - ECONNREFUSED 127.0.0.1:5432
-           Run 'selfheal fix 1' to analyze and fix
+           Run 'watchfix fix 1' to analyze and fix
 
-$ selfheal status
+$ watchfix status
 Watcher: running since 2025-01-27T10:30:00Z (manual mode, up 2m)
 PID: 12345
 
@@ -2585,7 +2585,7 @@ Actionable Errors:
 ID  Status     Type             Source   Message
 1   pending    ConnectionError  backend  ECONNREFUSED 127.0.0.1:5432
 
-$ selfheal fix 1
+$ watchfix fix 1
 Analyzing error #1...
 ✓ Analysis complete (15s)
 
@@ -2611,12 +2611,12 @@ Running verification...
 ### Autonomous Mode
 
 ```bash
-$ selfheal watch --daemon --autonomous
+$ watchfix watch --daemon --autonomous
 Watcher started in background (autonomous mode)
 PID: 12345
 
 # Later, check logs:
-$ selfheal logs --tail
+$ watchfix logs --tail
 [10:30:15] Error detected: #1 ConnectionError - ECONNREFUSED
 [10:30:15] Auto-fixing error #1...
 [10:30:16] Lock acquired for error #1
@@ -2627,7 +2627,7 @@ $ selfheal logs --tail
 [10:30:52] ✓ Error #1 fixed
 [10:30:52] Lock released for error #1
 
-$ selfheal status
+$ watchfix status
 Watcher: running since 2025-01-27T10:30:00Z (autonomous mode, up 15m)
 PID: 12345
 
@@ -2638,23 +2638,23 @@ Fixed today: 1
 Failed: 0
 
 # Manual fix blocked in autonomous mode:
-$ selfheal fix 2
+$ watchfix fix 2
 Error: Cannot run manual fix while daemon is in autonomous mode.
   The daemon will automatically fix errors.
-  Run 'selfheal stop' first if you want manual control.
+  Run 'watchfix stop' first if you want manual control.
 ```
 
 ### Fix All
 
 ```bash
-$ selfheal status
+$ watchfix status
 Watcher: not running
 
 Pending: 3
 Suggested (awaiting fix): 2
 ...
 
-$ selfheal fix --all
+$ watchfix fix --all
 Fixing 5 errors...
 
 [1/5] Error #1: ConnectionError
@@ -2693,7 +2693,7 @@ Summary:
 ### Context Cleanup
 
 ```bash
-$ selfheal clean --dry-run
+$ watchfix clean --dry-run
 Would remove context files older than 7 days:
   2025-01-15-error-1-attempt-0-analyze.md
   2025-01-15-error-1-attempt-0-analysis.yaml
@@ -2707,7 +2707,7 @@ Total: 23 files (1.2 MB)
 Skipping (in-progress errors):
   (none)
 
-$ selfheal clean
+$ watchfix clean
 Remove 23 files (1.2 MB)? [y/N] y
 Removed 23 files (1.2 MB)
 ```
@@ -2718,10 +2718,10 @@ Removed 23 files (1.2 MB)
 
 ```json
 {
-  "name": "selfheal",
+  "name": "watchfix",
   "version": "1.0.0",
   "type": "module",
-  "bin": { "selfheal": "./dist/cli/index.js" },
+  "bin": { "watchfix": "./dist/cli/index.js" },
   "main": "./dist/index.js",
   "scripts": {
     "build": "tsc",

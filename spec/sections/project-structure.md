@@ -1,7 +1,7 @@
 # Project Structure
 
 ```
-selfheal/
+watchfix/
 ├── src/
 │   ├── cli/
 │   │   ├── index.ts              # Entry point, commander setup
@@ -95,7 +95,7 @@ selfheal/
 ## Runtime Directory Structure
 
 ```
-.selfheal/
+.watchfix/
 ├── errors.db                     # SQLite database
 ├── daemon.log                    # Current log (< 10MB)
 ├── daemon.log.1                  # Rotated logs

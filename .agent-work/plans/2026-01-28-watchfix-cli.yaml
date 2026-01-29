@@ -1,14 +1,14 @@
-# selfheal CLI Implementation Plan
+# watchfix CLI Implementation Plan
 # A TypeScript CLI tool that watches project logs, detects errors, and uses AI coding agents to fix them
 
 metadata:
   created_at: "2026-01-28T00:00:00Z"
   created_by: "Discovery-Agent"
   version: "1.1"
-  source_idea: "Build selfheal from specification - a CLI tool that watches
+  source_idea: "Build watchfix from specification - a CLI tool that watches
     logs, detects errors, and dispatches AI agents to fix them"
   outcomes:
-    - Users can configure selfheal via YAML to watch log sources (file, docker,
+    - Users can configure watchfix via YAML to watch log sources (file, docker,
       command)
     - Errors are automatically detected using built-in and custom patterns
     - AI agents (Claude, Gemini, Codex) analyze errors and suggest/apply fixes
@@ -36,8 +36,8 @@ metadata:
     - All times stored as ISO8601 strings
     - Paths relative to config file directory
     - SQLite with WAL mode for concurrent access
-    - Context files in .selfheal/context/
-    - Database at .selfheal/errors.db
+    - Context files in .watchfix/context/
+    - Database at .watchfix/errors.db
 
 steps:
   # ============================================================================
@@ -56,7 +56,7 @@ steps:
       compilation, and configuration files for linting and formatting.
       See spec/sections/project-structure.md for the complete directory layout.
     requirements:
-      - Create package.json with name 'selfheal', type 'module', bin pointing to
+      - Create package.json with name 'watchfix', type 'module', bin pointing to
         ./dist/cli/index.js
       - "Add all production dependencies: commander, better-sqlite3, chokidar,
         zod, yaml"
@@ -67,7 +67,7 @@ steps:
       - Create .eslintrc.cjs and .prettierrc
       - Create vitest.config.ts with node environment, 30s timeout, serial test
         execution
-      - Create .gitignore with node_modules, dist, .selfheal/
+      - Create .gitignore with node_modules, dist, .watchfix/
       - Create src/ directory structure matching spec
     criteria:
       - npm install completes without errors
@@ -142,7 +142,7 @@ steps:
     parallel: true
     context: |
       Logging is used throughout the application. The logger writes to both
-      file (.selfheal/daemon.log) and optionally terminal. Supports log rotation
+      file (.watchfix/daemon.log) and optionally terminal. Supports log rotation
       based on file size (10MB max, 5 files).
 
       See spec/sections/logging.md for complete format, levels, and rotation behavior.
@@ -157,7 +157,7 @@ steps:
       - "File rotation: rename .log to .log.1, etc., max 5 files, rotate at 10MB"
       - Support terminal output toggle for foreground/daemon mode
     criteria:
-      - Logs are written to .selfheal/daemon.log
+      - Logs are written to .watchfix/daemon.log
       - Log format matches spec exactly
       - Verbosity filtering works (quiet hides INFO, verbose shows DEBUG)
       - Rotation occurs at 10MB boundary
@@ -215,7 +215,7 @@ steps:
         boolean, status?: number, error?: string}>"
       - Follow redirects up to 5 hops
       - Timeout support
-      - "User-Agent: selfheal/1.0"
+      - "User-Agent: watchfix/1.0"
     criteria:
       - "Returns success: true for 2xx responses"
       - "Returns success: false with status for non-2xx"
@@ -243,7 +243,7 @@ steps:
       stdout as version. Returns {exists: true, version} on success or
       {exists: false, error} on failure. Uses shell: true on Windows.
 
-      isOurProcess: Validates PID is a selfheal process for the expected project.
+      isOurProcess: Validates PID is a watchfix process for the expected project.
       On Unix uses 'ps -p {pid} -o args='. On Windows uses wmic or PowerShell
       fallback. Returns false if process doesn't exist or cmdline doesn't match.
     requirements:
@@ -257,7 +257,7 @@ steps:
       - "checkCliExists returns exists: true for 'node'"
       - "checkCliExists returns exists: false for non-existent command"
       - spawnWithTimeout kills process on timeout (SIGTERM then SIGKILL after 5s)
-      - isOurProcess validates PID belongs to selfheal for correct project
+      - isOurProcess validates PID belongs to watchfix for correct project
       - Unit tests cover both success and failure cases
     files:
       - src/utils/process.ts
@@ -340,12 +340,12 @@ steps:
       - "2.1"
     parallel: false
     context: |
-      Loads and validates selfheal.yaml from disk. Resolves paths relative
+      Loads and validates watchfix.yaml from disk. Resolves paths relative
       to config file directory. Reports validation errors clearly.
     requirements:
       - Create src/config/loader.ts
       - "Function loadConfig(configPath?: string): Config"
-      - "Default path: ./selfheal.yaml"
+      - "Default path: ./watchfix.yaml"
       - Resolve relative paths to config file directory
       - Validate with Zod schema
       - Throw UserError with clear messages on failure
@@ -404,9 +404,9 @@ steps:
       - class Database with constructor taking path
       - "Configure: WAL mode, busy_timeout=5000, synchronous=NORMAL"
       - "Methods: get, all, run, exec, close"
-      - Lazy initialization (create .selfheal/ dir if needed)
+      - Lazy initialization (create .watchfix/ dir if needed)
     criteria:
-      - Database file created in .selfheal/
+      - Database file created in .watchfix/
       - WAL mode enabled (check pragma)
       - Concurrent reads work
       - busy_timeout prevents immediate lock failures
@@ -880,7 +880,7 @@ steps:
       - "Function generateFixContext(error, analysis, config, attempt): { path,
         content }"
       - "Path format:
-        .selfheal/context/{date}-error-{id}-attempt-{attempt}-{phase}.md"
+        .watchfix/context/{date}-error-{id}-attempt-{attempt}-{phase}.md"
       - Content matches spec format exactly
       - Handle size limit (truncate stack trace, then log context)
       - UTF-8 encoding, replace non-UTF8 chars
@@ -1112,8 +1112,8 @@ steps:
       - Handle InternalError (log details, show generic message)
       - Set correct exit codes per spec
     criteria:
-      - selfheal --help shows all commands
-      - selfheal --version shows version
+      - watchfix --help shows all commands
+      - watchfix --version shows version
       - Global flags work across commands
       - Exit codes match spec
     files:
@@ -1130,18 +1130,18 @@ steps:
       - "11.1"
     parallel: false
     context: |
-      Creates selfheal.yaml with commented template. Sets project.name to
-      current directory name. Appends .selfheal/ to .gitignore.
+      Creates watchfix.yaml with commented template. Sets project.name to
+      current directory name. Appends .watchfix/ to .gitignore.
     requirements:
       - Create src/cli/commands/init.ts
-      - Generate selfheal.yaml with comments
+      - Generate watchfix.yaml with comments
       - Set project.name to current dir name
       - Set agent.provider to claude (default)
       - Include example log source configs (commented)
-      - Append .selfheal/ to .gitignore (create if needed)
+      - Append .watchfix/ to .gitignore (create if needed)
       - "Flags: --agent, --force"
     criteria:
-      - Creates valid selfheal.yaml
+      - Creates valid watchfix.yaml
       - Uses --agent flag if provided
       - Fails if file exists (without --force)
       - .gitignore updated correctly
@@ -1171,7 +1171,7 @@ steps:
       mode or PM2.
 
       The daemon reads config once at startup. To apply config changes, run
-      'selfheal stop' and restart.
+      'watchfix stop' and restart.
 
       Before starting, call recoverStaleErrors() to handle errors left in
       analyzing/fixing status from a previous crash.
@@ -1199,7 +1199,7 @@ steps:
       - src/fixer/index.ts
       - src/utils/daemon.ts
     risk_notes: |
-      The daemon child uses --daemon-child internal flag with SELFHEAL_DAEMON
+      The daemon child uses --daemon-child internal flag with WATCHFIX_DAEMON
       env var. If user manually passes --daemon-child without env var, exit
       with error. Test the parent-child handoff carefully on both Unix and
       Windows (Windows should reject --daemon early).
@@ -1351,7 +1351,7 @@ steps:
       Shows activity log entries. Supports --tail to follow log.
     requirements:
       - Create src/cli/commands/logs.ts
-      - Read .selfheal/daemon.log
+      - Read .watchfix/daemon.log
       - Show last N lines (default 50)
       - "Flag: --tail to stream new entries"
       - "Flag: --lines to set count"
@@ -1373,7 +1373,7 @@ steps:
       - "6.3"
     parallel: false
     context: |
-      Validates selfheal.yaml without starting the watcher.
+      Validates watchfix.yaml without starting the watcher.
     requirements:
       - Create src/cli/commands/config.ts
       - Check YAML syntax
@@ -1428,12 +1428,12 @@ steps:
       Shows version and environment information. Works without config file.
     requirements:
       - Create src/cli/commands/version.ts
-      - Show selfheal version from package.json
+      - Show watchfix version from package.json
       - Show Node.js version
       - Show agent if config exists
       - Show config status (valid, invalid, not found)
     criteria:
-      - Works without selfheal.yaml
+      - Works without watchfix.yaml
       - Shows all version info
       - Shows config validation status
     files:
@@ -1615,7 +1615,7 @@ steps:
       - Run npm run build
       - Run npm test (all tests pass)
       - Run npm run lint (no errors)
-      - "Test CLI: selfheal --help, selfheal init, selfheal version"
+      - "Test CLI: watchfix --help, watchfix init, watchfix version"
       - Verify bin entry point works
     criteria:
       - Build completes without errors

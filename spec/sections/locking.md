@@ -4,7 +4,7 @@
 
 Multiple processes may try to fix the same error:
 - Daemon running in autonomous mode
-- User running `selfheal fix <id>`
+- User running `watchfix fix <id>`
 - Multiple terminal sessions
 
 ## Solution: Optimistic Locking

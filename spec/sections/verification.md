@@ -18,7 +18,7 @@ After a fix is applied:
    - Expect 2xx response (200-299)
    - Follows redirects (up to 5 hops)
    - If 5th response is still a redirect, treat as failure: "Too many redirects"
-   - Sends `User-Agent: selfheal/1.0` header
+   - Sends `User-Agent: watchfix/1.0` header
    - Does not send request body
    - Timeout: `health_check_timeout` (default: 10s) per check
    - Stop on first failure

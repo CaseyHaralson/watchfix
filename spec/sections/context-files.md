@@ -3,7 +3,7 @@
 ## Directory Structure
 
 ```
-.selfheal/context/
+.watchfix/context/
 ├── {date}-error-{id}-attempt-{n}-analyze.md     # Analysis phase input
 ├── {date}-error-{id}-attempt-{n}-analysis.yaml  # Analysis phase output
 ├── {date}-error-{id}-attempt-{n}-fix.md         # Fix phase input
@@ -14,10 +14,10 @@ Date format: `YYYY-MM-DD` (date context file is created, not error detection dat
 
 ## Analysis Phase Input
 
-`.selfheal/context/{date}-error-{id}-attempt-{n}-analyze.md`:
+`.watchfix/context/{date}-error-{id}-attempt-{n}-analyze.md`:
 
 ```markdown
-# Self-Heal Task
+# WatchFix Task
 
 ## Mode
 analyze
@@ -53,7 +53,7 @@ analyze
 3. Determine what files need to be modified
 4. Assess your confidence in the fix
 
-Write your analysis to: `.selfheal/context/{date}-error-{id}-attempt-{n}-analysis.yaml`
+Write your analysis to: `.watchfix/context/{date}-error-{id}-attempt-{n}-analysis.yaml`
 
 Use this exact YAML format:
 ```yaml
@@ -79,7 +79,7 @@ confidence: high | medium | low
 
 ## Analysis Phase Output
 
-`.selfheal/context/{date}-error-{id}-attempt-{n}-analysis.yaml`:
+`.watchfix/context/{date}-error-{id}-attempt-{n}-analysis.yaml`:
 
 ```yaml
 summary: PostgreSQL container not starting due to port conflict
@@ -99,10 +99,10 @@ confidence: high
 
 ## Fix Phase Input
 
-`.selfheal/context/{date}-error-{id}-attempt-{n}-fix.md`:
+`.watchfix/context/{date}-error-{id}-attempt-{n}-fix.md`:
 
 ```markdown
-# Self-Heal Task
+# WatchFix Task
 
 ## Mode
 fix
@@ -134,7 +134,7 @@ fix
 3. Follow existing code style and conventions
 4. Make minimal, targeted changes
 
-Write your results to: `.selfheal/context/{date}-error-{id}-attempt-{n}-result.yaml`
+Write your results to: `.watchfix/context/{date}-error-{id}-attempt-{n}-result.yaml`
 
 Use this exact YAML format:
 ```yaml
@@ -157,7 +157,7 @@ notes: |
 
 ## Fix Phase Output
 
-`.selfheal/context/{date}-error-{id}-attempt-{n}-result.yaml`:
+`.watchfix/context/{date}-error-{id}-attempt-{n}-result.yaml`:
 
 ```yaml
 success: true

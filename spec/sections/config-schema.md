@@ -2,7 +2,7 @@
 
 ## Path Resolution
 
-All relative paths in `selfheal.yaml` are resolved relative to the directory containing the config file. When using `--config` to specify an alternate location, paths are still relative to that config file's directory, not the current working directory.
+All relative paths in `watchfix.yaml` are resolved relative to the directory containing the config file. When using `--config` to specify an alternate location, paths are still relative to that config file's directory, not the current working directory.
 
 ## Duration Strings
 
@@ -16,7 +16,7 @@ Examples: `5s`, `10m`, `1h`, `90s`
 ## Complete Schema
 
 ```yaml
-# selfheal.yaml
+# watchfix.yaml
 
 project:
   name: my-app                    # Project identifier (used in logs)

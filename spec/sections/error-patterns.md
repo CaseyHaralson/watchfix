@@ -25,7 +25,7 @@ Always active, cannot be disabled.
 
 ## Custom Pattern Format
 
-From `selfheal.yaml`:
+From `watchfix.yaml`:
 
 ```yaml
 patterns:

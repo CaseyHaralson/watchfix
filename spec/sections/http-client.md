@@ -10,7 +10,7 @@ Uses Node.js built-in fetch API (Node 18+).
 - Expect 2xx response (200-299) for success
 - Follow redirects up to 5 hops
 - If 5th response is still a redirect, treat as failure: "Too many redirects"
-- Send `User-Agent: selfheal/1.0` header
+- Send `User-Agent: watchfix/1.0` header
 - No request body
 - Timeout support (default: 10s)
 

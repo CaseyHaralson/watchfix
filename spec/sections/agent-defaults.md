@@ -45,8 +45,8 @@ function buildCommand(config: AgentConfig, prompt: string): [string, string[]] {
 // Example for Claude:
 // command: "claude"
 // args: ["--model", "sonnet", "--dangerously-skip-permissions", "-p"]
-// prompt: "Read .selfheal/context/2025-01-27-error-1-attempt-0.md and follow the instructions."
-// Result: claude --model sonnet --dangerously-skip-permissions -p "Read .selfheal/context/..."
+// prompt: "Read .watchfix/context/2025-01-27-error-1-attempt-0.md and follow the instructions."
+// Result: claude --model sonnet --dangerously-skip-permissions -p "Read .watchfix/context/..."
 ```
 
 ## Prompt Templates
