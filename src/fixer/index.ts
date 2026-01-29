@@ -147,6 +147,7 @@ export class FixOrchestrator {
       };
     }
 
+    this.logger.info(`Starting fix orchestrator for error ${errorId}`);
     let lockHeld = true;
     let attempts = initial.fixAttempts;
     let analysisOutput: AnalysisOutput | undefined;
@@ -206,6 +207,7 @@ export class FixOrchestrator {
           JSON.stringify({ attempt: attempts, lockId })
         );
 
+        this.logger.info(`Analyzing error ${errorId} (attempt ${attempts})...`);
         const context = generateAnalyzeContext(error, this.config, attempts);
         const contextPath = path.resolve(this.config.project.root, context.path);
         await fs.mkdir(path.dirname(contextPath), { recursive: true });
@@ -361,6 +363,7 @@ export class FixOrchestrator {
         JSON.stringify({ attempt: attempts, lockId })
       );
 
+      this.logger.info(`Applying fix for error ${errorId} (attempt ${attempts})...`);
       const analysisYaml = analysisToYaml(analysisOutput);
       const fixContext = generateFixContext(
         error,
@@ -491,6 +494,7 @@ export class FixOrchestrator {
         JSON.stringify({ attempt: attempts })
       );
 
+      this.logger.info(`Verifying fix for error ${errorId}...`);
       verificationResult = await runVerification(this.config, {
         logger: this.logger,
         terminalEnabled: this.terminalEnabled,

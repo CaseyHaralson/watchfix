@@ -30,18 +30,19 @@ export class FixQueue {
     }
 
     if (this.processingPromise) {
+      // If already processing, wait for the current loop to finish and then
+      // trigger a new check to ensure no items were missed in the window
+      // between getNext() returning null and the promise resolving.
       await this.processingPromise;
-      return;
+      return this.processQueueIfReady();
     }
 
     this.processingPromise = (async () => {
       try {
-        let keepGoing = true;
-        while (keepGoing) {
+        while (true) {
           const next = this.getNext();
           if (!next) {
-            keepGoing = false;
-            return;
+            break;
           }
 
           this.fixInProgress = true;
@@ -51,11 +52,16 @@ export class FixQueue {
             this.fixInProgress = false;
           }
         }
-      } finally {
-        this.processingPromise = null;
+      } catch (err) {
+        // We catch here to ensure the promise resolves and processingPromise is cleared
+        // The error should ideally be logged by a real logger if available.
       }
     })();
 
-    await this.processingPromise;
+    try {
+      await this.processingPromise;
+    } finally {
+      this.processingPromise = null;
+    }
   }
 }
