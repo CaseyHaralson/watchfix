@@ -492,7 +492,7 @@ steps:
 
   - id: "3.4"
     description: "Create locking utilities"
-    status: "pending"
+    status: "complete"
     deps:
       - "3.3"
       - "1.2"
@@ -524,6 +524,7 @@ steps:
       - src/db/queries.ts
       - src/utils/logger.ts
       - spec/sections/locking.md
+    agent: codex
 
   # ============================================================================
   # Phase 4: Error Detection
