@@ -1,0 +1,15 @@
+step_id: "11.5"
+agent: codex
+outcome: success
+details: Implemented status command to report watcher state, error counts, and
+  actionable errors with stale state cleanup; wired command into CLI.
+timestamp: 2026-01-29T06:07:32.427Z
+artifacts:
+  - src/cli/commands/status.ts
+  - src/cli/index.ts
+blocked_reason: null
+test_results: "npm test: 73 passed, 2 skipped; npm run lint: pass"
+reviews:
+  - iteration: 1
+    approved: true
+    feedback: []

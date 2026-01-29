@@ -3,6 +3,7 @@ import { Command, Option } from 'commander';
 import { createRequire } from 'node:module';
 
 import { initCommand } from './commands/init.js';
+import { statusCommand } from './commands/status.js';
 import { stopCommand } from './commands/stop.js';
 import { watchCommand } from './commands/watch.js';
 import { EXIT_CODES, InternalError, UserError } from '../utils/errors.js';
@@ -59,7 +60,9 @@ const registerCommands = (program: Command): void => {
     program
       .command('status')
       .description('Show watcher state and pending errors')
-      .action(notImplemented('status'))
+      .action(async (options) => {
+        await statusCommand(options);
+      })
   );
 
   addGlobalOptions(
