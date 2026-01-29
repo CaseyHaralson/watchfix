@@ -89,7 +89,7 @@ steps:
 
   - id: "0.2"
     description: "Install project dependencies"
-    status: "pending"
+    status: "complete"
     deps:
       - "0.1"
     parallel: false
@@ -107,6 +107,7 @@ steps:
     files: []
     commands:
       - npm install
+    agent: codex
 
   # ============================================================================
   # Phase 1: Core Utilities
