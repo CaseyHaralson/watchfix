@@ -626,7 +626,7 @@ steps:
 
   - id: "5.1"
     description: "Create log source interface and types"
-    status: "pending"
+    status: "complete"
     deps:
       - "0.2"
     parallel: true
@@ -645,10 +645,11 @@ steps:
       - LogEvent has all required fields
     files:
       - src/watcher/sources/types.ts
+    agent: codex
 
   - id: "5.2"
     description: "Create file log source with chokidar"
-    status: "pending"
+    status: "complete"
     deps:
       - "5.1"
       - "1.2"
@@ -674,6 +675,7 @@ steps:
     context_files:
       - src/watcher/sources/types.ts
       - src/utils/logger.ts
+    agent: codex
 
   - id: "5.3"
     description: "Create Docker log source"
@@ -793,7 +795,7 @@ steps:
 
   - id: "6.1"
     description: "Create agent types and interface"
-    status: "pending"
+    status: "complete"
     deps:
       - "0.2"
     parallel: true
@@ -814,6 +816,7 @@ steps:
       - src/agents/types.ts
     context_files:
       - spec/sections/agent-defaults.md
+    agent: codex
 
   - id: "6.2"
     description: "Create base agent with spawn/timeout/retry logic"
