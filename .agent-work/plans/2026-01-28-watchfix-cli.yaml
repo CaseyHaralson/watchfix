@@ -1624,7 +1624,7 @@ steps:
 
   - id: "12.6"
     description: "Create E2E tests for daemon lifecycle"
-    status: "pending"
+    status: "complete"
     deps:
       - "11.3"
       - "11.4"
@@ -1647,6 +1647,7 @@ steps:
       - test/e2e/daemon-lifecycle.test.ts
     context_files:
       - test/helpers/test-utils.ts
+    agent: codex
 
   # ============================================================================
   # Phase 13: Final Integration

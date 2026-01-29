@@ -1,0 +1,25 @@
+step_id: "12.6"
+agent: codex
+outcome: success
+details: Guarded daemon lifecycle E2E watcher PID lookup against schema races
+  and verified with targeted vitest run.
+timestamp: 2026-01-29T07:46:57.378Z
+artifacts:
+  - test/e2e/daemon-lifecycle.test.ts
+blocked_reason: null
+test_results: 2/2 passed (vitest run test/e2e/daemon-lifecycle.test.ts)
+reviews:
+  - iteration: 1
+    approved: false
+    feedback:
+      - severity: blocking
+        file: test/e2e/daemon-lifecycle.test.ts
+        line: 190
+        comment: getWatcherPid queries watcher_state without guarding for schema
+          creation. If the daemon has created the DB file but hasn’t finished
+          initializeSchema yet, db.get will throw and fail the test immediately.
+          Wrap the query in try/catch (return null on error) or ensure schema
+          exists before querying to avoid flakiness.
+  - iteration: 2
+    approved: true
+    feedback: []
