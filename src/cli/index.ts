@@ -3,6 +3,7 @@ import { Command, Option } from 'commander';
 import { createRequire } from 'node:module';
 
 import { initCommand } from './commands/init.js';
+import { showCommand } from './commands/show.js';
 import { statusCommand } from './commands/status.js';
 import { stopCommand } from './commands/stop.js';
 import { watchCommand } from './commands/watch.js';
@@ -70,7 +71,10 @@ const registerCommands = (program: Command): void => {
       .command('show')
       .description('Show full error details and analysis')
       .argument('<id>', 'Error identifier')
-      .action(notImplemented('show'))
+      .option('--json', 'Output machine-readable JSON')
+      .action(async (id, options) => {
+        await showCommand(id, options);
+      })
   );
 
   addGlobalOptions(

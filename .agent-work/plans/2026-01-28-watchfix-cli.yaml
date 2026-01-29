@@ -1294,7 +1294,7 @@ steps:
 
   - id: "11.6"
     description: "Create show command"
-    status: "pending"
+    status: "complete"
     deps:
       - "11.1"
       - "3.3"
@@ -1322,6 +1322,7 @@ steps:
       - src/db/queries.ts
       - spec/sections/database-schema.md
       - spec/sections/context-files.md
+    agent: codex
 
   - id: "11.7"
     description: "Create fix command"
