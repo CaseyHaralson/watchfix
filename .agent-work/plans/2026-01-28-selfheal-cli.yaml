@@ -54,6 +54,7 @@ steps:
       Create the foundational project structure for a TypeScript CLI application.
       This includes package.json with all dependencies, tsconfig.json for TypeScript
       compilation, and configuration files for linting and formatting.
+      See spec/sections/project-structure.md for the complete directory layout.
     requirements:
       - Create package.json with name 'selfheal', type 'module', bin pointing to
         ./dist/cli/index.js
@@ -67,7 +68,7 @@ steps:
       - Create vitest.config.ts with node environment, 30s timeout, serial test
         execution
       - Create .gitignore with node_modules, dist, .selfheal/
-      - Create src/ directory structure as per spec
+      - Create src/ directory structure matching spec
     criteria:
       - npm install completes without errors
       - npm run build compiles successfully (after source files exist)
@@ -80,6 +81,8 @@ steps:
       - .prettierrc
       - vitest.config.ts
       - .gitignore
+    context_files:
+      - spec/sections/project-structure.md
 
   - id: "0.2"
     description: "Install project dependencies"
@@ -142,13 +145,7 @@ steps:
       file (.selfheal/daemon.log) and optionally terminal. Supports log rotation
       based on file size (10MB max, 5 files).
 
-      Log format: '{ISO8601 timestamp} [{LEVEL}] {message}'
-      Example: 2025-01-27T10:30:00.000Z [INFO] Watcher started (autonomous=false)
-
-      Verbosity levels:
-      - quiet: WARN + ERROR only
-      - normal (default): INFO + WARN + ERROR
-      - verbose: DEBUG + INFO + WARN + ERROR
+      See spec/sections/logging.md for complete format, levels, and rotation behavior.
 
       Terminal output is enabled in foreground mode, disabled in daemon mode.
     requirements:
@@ -169,6 +166,8 @@ steps:
     files:
       - src/utils/logger.ts
       - test/unit/logger.test.ts
+    context_files:
+      - spec/sections/logging.md
 
   - id: "1.3"
     description: "Create hash utility for deduplication"
@@ -179,6 +178,8 @@ steps:
     context: |
       Errors are deduplicated by hash: sha256(source + error_type + normalized_message).
       Message normalization removes timestamps, UUIDs, memory addresses, and collapses whitespace.
+
+      See spec/sections/deduplication.md for normalization rules and deduplication behavior.
     requirements:
       - Create src/utils/hash.ts
       - "Function normalizeMessage(message: string): string"
@@ -194,6 +195,8 @@ steps:
     files:
       - src/utils/hash.ts
       - test/unit/hash.test.ts
+    context_files:
+      - spec/sections/deduplication.md
 
   - id: "1.4"
     description: "Create HTTP client for health checks"
@@ -205,11 +208,7 @@ steps:
       Health checks make HTTP GET requests expecting 2xx responses.
       Uses Node.js built-in fetch API (Node 18+).
 
-      Behavior per spec:
-      - Follow redirects up to 5 hops
-      - If 5th response is still redirect, treat as failure: "Too many redirects"
-      - Send User-Agent: selfheal/1.0 header
-      - No request body
+      See spec/sections/http-client.md for complete behavior requirements.
     requirements:
       - Create src/utils/http.ts
       - "Function checkHealth(url: string, timeout: number): Promise<{success:
@@ -227,6 +226,8 @@ steps:
     files:
       - src/utils/http.ts
       - test/unit/http.test.ts
+    context_files:
+      - spec/sections/http-client.md
 
   - id: "1.5"
     description: "Create process utilities for CLI validation and spawn helpers"
@@ -272,16 +273,8 @@ steps:
       Custom error classes for user-facing errors vs internal errors.
       Also defines common types used across the application.
 
-      Exit codes per spec:
-      - 0: Success
-      - 1: General error (config invalid, agent failed, etc.)
-      - 2: Watcher state conflict (already running / not running)
-      - 3: Target not actionable (error not found, wrong status, locked)
-      - 4: Database schema mismatch (requires migration)
-      - 130: Interrupted by user (SIGINT)
-
-      ErrorStatus type: 'pending' | 'analyzing' | 'suggested' | 'fixing' |
-      'fixed' | 'failed' | 'ignored'
+      See spec/sections/exit-codes.md for exit code definitions.
+      See spec/sections/error-status.md for ErrorStatus type and flow.
     requirements:
       - Create src/utils/errors.ts
       - class UserError extends Error (user-facing, shown directly)
@@ -297,6 +290,9 @@ steps:
     files:
       - src/utils/errors.ts
       - test/unit/errors.test.ts
+    context_files:
+      - spec/sections/exit-codes.md
+      - spec/sections/error-status.md
 
   # ============================================================================
   # Phase 2: Configuration System
@@ -371,8 +367,7 @@ steps:
       Default command and args for each agent provider (claude, gemini, codex).
       These are used when only 'provider' is specified in config.
 
-      Per spec project structure, this goes in src/agents/defaults.ts.
-      The config loader and agent factory both import from here.
+      See spec/sections/agent-defaults.md for complete defaults and command building.
     requirements:
       - Create src/agents/defaults.ts
       - Export AGENT_DEFAULTS constant with claude, gemini, codex configs
@@ -384,6 +379,8 @@ steps:
       - Codex default uses 'exec --yolo'
     files:
       - src/agents/defaults.ts
+    context_files:
+      - spec/sections/agent-defaults.md
 
   # ============================================================================
   # Phase 3: Database Layer
@@ -424,8 +421,9 @@ steps:
     context: |
       Define the database schema with tables: errors, watcher_state, activity_log,
       schema_version. For v1, single schema version with mismatch detection.
-      Note: The spec mentions migrations.ts but for v1 with a single schema
-      version, combining schema and migration logic into schema.ts is acceptable.
+
+      See spec/sections/database-schema.md for complete table definitions,
+      column types, indexes, and activity log action types.
     requirements:
       - Create src/db/schema.ts
       - Define SCHEMA_VERSION = 1
@@ -443,6 +441,7 @@ steps:
       - src/db/schema.ts
     context_files:
       - src/db/index.ts
+      - spec/sections/database-schema.md
 
   - id: "3.3"
     description: "Create typed query functions for errors"
@@ -482,6 +481,9 @@ steps:
     context: |
       Optimistic locking for errors being processed. Lock ID is
       hostname:pid:timestamp. Locks expire after 10 minutes.
+
+      See spec/sections/locking.md for complete locking logic, status transitions,
+      and stale recovery.
     requirements:
       - Create src/fixer/lock.ts
       - "Function generateLockId(): string"
@@ -502,6 +504,7 @@ steps:
     context_files:
       - src/db/queries.ts
       - src/utils/logger.ts
+      - spec/sections/locking.md
 
   # ============================================================================
   # Phase 4: Error Detection
@@ -518,38 +521,8 @@ steps:
       Built-in patterns for detecting errors in logs. These are always active
       and cannot be disabled.
 
-      BUILTIN_MATCH_PATTERNS (trigger detection):
-      - JavaScript: Error:, TypeError:, ReferenceError:, SyntaxError:,
-        RangeError:, URIError:, EvalError:
-      - Node.js: UnhandledPromiseRejection, ECONNREFUSED, ENOTFOUND, ETIMEDOUT,
-        EADDRINUSE, EACCES, EPERM
-      - Python: Traceback (most recent call last), Exception:, Error:,
-        AssertionError:
-      - Go: panic:, fatal error:, runtime error:
-      - Docker: container is not running, unhealthy, OOMKilled, no such container,
-        connection refused
-      - Database: SQLSTATE[, deadlock detected, duplicate key, constraint violation
-      - Generic: FATAL, CRITICAL, EMERGENCY (case-insensitive, must be followed
-        by : or whitespace)
-
-      BUILTIN_IGNORE_PATTERNS (suppress detection):
-      - Log levels: DEBUG, TRACE, VERBOSE, INFO (at line start, followed by : or
-        whitespace)
-      - Success indicators: successfully, healthy, passed, completed, OK
-
-      Ignore patterns take precedence over match patterns.
-
-      Custom patterns from config use 'regex:' prefix for regex, otherwise
-      case-insensitive substring match.
-
-      extractErrorType uses these patterns in order:
-      - /^(\w+Error):/ -> capture group (TypeError, ReferenceError, etc.)
-      - /^(\w+Exception):/ -> capture group
-      - /(E[A-Z]{2,})(?:[\s:,]|$)/ -> ECONNREFUSED, ENOTFOUND, etc.
-      - /^(panic):/ -> Go panic
-      - /^(FATAL|CRITICAL):?/i -> Generic fatal
-      - /SQLSTATE\[(\w+)\]/ -> Database errors
-      - Default: 'Error'
+      See spec/sections/error-patterns.md for complete pattern lists, error type
+      extraction logic, and continuation patterns for stack traces.
     requirements:
       - Create src/watcher/patterns.ts
       - BUILTIN_MATCH_PATTERNS array of patterns
@@ -568,6 +541,7 @@ steps:
       - src/watcher/patterns.ts
     context_files:
       - src/utils/hash.ts
+      - spec/sections/error-patterns.md
     risk_notes: |
       Pattern matching is critical for correct error detection. Regex patterns
       should be carefully tested to avoid false positives or missed errors.
@@ -587,23 +561,14 @@ steps:
       (lines before/after error). Continuation patterns detect stack frames.
       Buffer flushes on new error, non-continuation line, or 100ms timeout.
 
-      Continuation patterns (attached to previous error):
-      - Lines starting with 'at ' (JS stack frames)
-      - Lines starting with whitespace followed by 'at ' or 'in '
-      - Lines matching /^\s+File "/ (Python stack frames)
-      - Lines matching /^\s+\d+:\d+/ (Go stack frames with line:col)
-      - Lines matching /^\s+\.\.\./ (truncation indicators)
+      See spec/sections/error-patterns.md for continuation patterns and buffer
+      flush triggers.
 
       Context window behavior:
       - context_lines_before: Lines preceding the error (default: 10)
       - context_lines_after: Lines following the END of the stack trace (default: 5)
       - Important: "after" context starts after stack trace ends, not after
         error line
-
-      Buffer flushes when:
-      - A new error line is detected
-      - A non-continuation, non-error line is detected
-      - 100ms passes with no new input
 
       Line length limit: Lines > 64KB are truncated with '... [truncated]' suffix.
     requirements:
@@ -627,6 +592,7 @@ steps:
       - src/watcher/patterns.ts
       - src/utils/logger.ts
       - src/utils/hash.ts
+      - spec/sections/error-patterns.md
     risk_notes: |
       The 100ms timeout requires careful async handling. The context window
       logic must correctly distinguish between "after error line" and
@@ -765,15 +731,8 @@ steps:
       Orchestrates multiple log sources, routing events through a serialized
       queue to the parser. Handles deduplication at the database level.
 
-      Deduplication rules per spec:
-      - If existing error has status pending/analyzing/suggested/fixing: drop new
-      - If existing error has status fixed/failed/ignored: create new entry
-
-      When creating new entry for recurring error:
-      - created_at set to new detection time
-      - fix_attempts reset to 0
-      - suggestion and fix_result cleared (NULL)
-      - status set to pending
+      See spec/sections/deduplication.md for deduplication rules and recurring
+      error handling.
 
       The event queue must be serial (concurrency 1) to avoid race conditions
       in deduplication and database writes.
@@ -799,6 +758,7 @@ steps:
       - src/watcher/sources/types.ts
       - src/watcher/parser.ts
       - src/db/queries.ts
+      - spec/sections/deduplication.md
     risk_notes: |
       The serial event queue is critical - parallel processing would cause
       race conditions in deduplication. Test concurrent event arrival from
@@ -905,6 +865,9 @@ steps:
     context: |
       Generates markdown context files for agent analysis and fix phases.
       Includes error details, instructions, and expected output format.
+
+      See spec/sections/context-files.md for complete file format, output schemas,
+      and size limit handling.
     requirements:
       - Create src/fixer/context.ts
       - "Function generateAnalyzeContext(error, config, attempt): { path,
@@ -926,6 +889,7 @@ steps:
       - test/unit/context.test.ts
     context_files:
       - src/db/queries.ts
+      - spec/sections/context-files.md
 
   - id: "7.2"
     description: "Create agent output parser and validator"
@@ -935,8 +899,9 @@ steps:
     parallel: true
     context: |
       Parses YAML output from agents and validates required fields.
-      Analysis output: summary, root_cause, suggested_fix, files_to_modify, confidence.
-      Fix output: success, summary, optional files_changed and notes.
+
+      See spec/sections/context-files.md for output format schemas (Analysis
+      output and Fix result sections).
     requirements:
       - Create src/fixer/output.ts
       - "Function parseAnalysisOutput(content: string): AnalysisOutput"
@@ -951,6 +916,8 @@ steps:
     files:
       - src/fixer/output.ts
       - test/unit/agent-output.test.ts
+    context_files:
+      - spec/sections/context-files.md
 
   # ============================================================================
   # Phase 8: Verification System
@@ -968,6 +935,9 @@ steps:
     context: |
       Runs test commands and health checks after fix is applied.
       Commands run in shell, health checks use HTTP GET.
+
+      See spec/sections/verification.md for complete verification flow,
+      outcome handling, and post-verification status logic.
     requirements:
       - Create src/fixer/verifier.ts
       - "Function runVerification(config): Promise<VerificationResult>"
@@ -990,6 +960,7 @@ steps:
       - src/utils/process.ts
       - src/utils/duration.ts
       - src/utils/logger.ts
+      - spec/sections/verification.md
 
   # ============================================================================
   # Phase 9: Fix Pipeline
@@ -1033,6 +1004,10 @@ steps:
     context: |
       Orchestrates the full fix pipeline: acquire lock, analyze (if needed),
       fix, verify, update status. Handles failures and retries.
+
+      See spec/sections/error-status.md for status flow diagram.
+      See spec/sections/locking.md for lock lifecycle.
+      See spec/sections/verification.md for post-verification status logic.
     requirements:
       - Create src/fixer/index.ts
       - class FixOrchestrator
@@ -1060,6 +1035,9 @@ steps:
       - src/fixer/output.ts
       - src/fixer/verifier.ts
       - src/fixer/lock.ts
+      - spec/sections/error-status.md
+      - spec/sections/locking.md
+      - spec/sections/verification.md
     risk_notes: |
       The fix orchestrator is the most complex component, coordinating agents,
       locking, status transitions, and verification. Thorough testing with
@@ -1080,6 +1058,8 @@ steps:
     context: |
       Utilities for daemonizing the process (spawn detached child),
       signal handling for graceful shutdown, stale status recovery.
+
+      See spec/sections/locking.md for stale recovery logic.
     requirements:
       - Create src/utils/daemon.ts
       - "Function daemonize(): number (returns child PID)"
@@ -1100,6 +1080,7 @@ steps:
       - src/utils/process.ts
       - src/db/queries.ts
       - src/utils/errors.ts
+      - spec/sections/locking.md
 
   # ============================================================================
   # Phase 11: CLI Commands
@@ -1115,6 +1096,8 @@ steps:
     context: |
       Main CLI entry point using Commander. Sets up global flags and
       subcommands. Handles errors and sets exit codes.
+
+      See spec/sections/exit-codes.md for exit code definitions.
     requirements:
       - Create src/cli/index.ts
       - Use commander for CLI framework
@@ -1133,6 +1116,7 @@ steps:
     context_files:
       - src/config/loader.ts
       - src/utils/errors.ts
+      - spec/sections/exit-codes.md
 
   - id: "11.2"
     description: "Create init command"
@@ -1275,9 +1259,12 @@ steps:
     context: |
       Displays full details for an error including metadata, message,
       stack trace, context, analysis, and fix result.
+
+      See spec/sections/database-schema.md for errors table columns.
+      See spec/sections/context-files.md for analysis and fix output formats.
     requirements:
       - Create src/cli/commands/show.ts
-      - Show all error fields from spec
+      - Show all error fields from database schema
       - Show analysis if exists (summary, root_cause, suggested_fix, confidence)
       - Show fix result if exists (success, summary, files_changed)
       - Show activity log entries for this error
@@ -1290,6 +1277,8 @@ steps:
       - src/cli/commands/show.ts
     context_files:
       - src/db/queries.ts
+      - spec/sections/database-schema.md
+      - spec/sections/context-files.md
 
   - id: "11.7"
     description: "Create fix command"
