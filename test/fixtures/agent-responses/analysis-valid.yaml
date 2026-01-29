@@ -1,0 +1,11 @@
+summary: Missing null check before accessing user ID
+root_cause: |
+  The worker assumes the user object is always present.
+  When the API returns an empty response, the handler tries to read user.id
+  and throws a TypeError.
+suggested_fix: |
+  Add a guard in src/worker.ts to ensure the user object exists before
+  accessing its properties. If missing, log a warning and return early.
+files_to_modify:
+  - src/worker.ts
+confidence: medium

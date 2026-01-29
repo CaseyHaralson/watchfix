@@ -1,0 +1,49 @@
+project:
+  name: watchfix-demo
+  root: .
+
+agent:
+  provider: codex
+  timeout: 2m
+  retries: 1
+
+logs:
+  sources:
+    - name: backend
+      type: file
+      path: ./logs/backend.log
+    - name: api
+      type: docker
+      container: watchfix-api
+    - name: compose
+      type: command
+      run: docker-compose logs --tail=100
+      interval: 30s
+  context_lines_before: 8
+  context_lines_after: 4
+  max_line_buffer: 5000
+
+verification:
+  test_commands:
+    - npm run lint
+    - npm test
+  test_command_timeout: 4m
+  health_checks:
+    - http://localhost:3000/health
+  health_check_timeout: 8s
+  wait_after_fix: 5s
+
+limits:
+  max_attempts_per_error: 2
+
+cleanup:
+  context_max_age_days: 5
+  context_max_size_kb: 128
+
+patterns:
+  match:
+    - "FATAL:"
+    - "regex:OOM.*killed"
+  ignore:
+    - "DeprecationWarning"
+    - "regex:retry attempt \\d+"

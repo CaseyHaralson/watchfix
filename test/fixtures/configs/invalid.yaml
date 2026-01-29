@@ -1,0 +1,29 @@
+project:
+  name: ""
+
+agent:
+  provider: openai
+  timeout: 0s
+  retries: -1
+
+logs:
+  sources:
+    - name: backend
+      type: file
+      path: ""
+    - name: backend
+      type: command
+      run: tail -f ./logs/backend.log
+      # interval missing
+
+verification:
+  test_command_timeout: 25h
+  health_checks:
+    - ftp://localhost/health
+
+limits:
+  max_attempts_per_error: 0
+
+cleanup:
+  context_max_age_days: 0
+  context_max_size_kb: 32

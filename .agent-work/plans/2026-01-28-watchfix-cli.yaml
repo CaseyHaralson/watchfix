@@ -1490,7 +1490,7 @@ steps:
 
   - id: "12.1"
     description: "Create test fixtures and mock agent"
-    status: "pending"
+    status: "complete"
     deps:
       - "0.2"
     parallel: true
@@ -1515,6 +1515,7 @@ steps:
       - test/fixtures/agent-responses/fix-valid.yaml
       - test/helpers/mock-agent.ts
       - test/helpers/test-utils.ts
+    agent: codex
 
   - id: "12.2"
     description: "Create integration tests for database"
