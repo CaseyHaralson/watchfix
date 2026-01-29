@@ -745,7 +745,7 @@ steps:
 
   - id: "5.5"
     description: "Create watcher orchestrator with event queue"
-    status: "pending"
+    status: "complete"
     deps:
       - "5.2"
       - "5.3"
@@ -790,6 +790,7 @@ steps:
       race conditions in deduplication. Test concurrent event arrival from
       multiple sources. Handle the case where all sources fail to initialize
       (log ERROR but continue running, warn every 60s).
+    agent: codex
 
   # ============================================================================
   # Phase 6: Agent System
