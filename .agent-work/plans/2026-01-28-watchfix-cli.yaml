@@ -1601,7 +1601,7 @@ steps:
 
   - id: "12.5"
     description: "Create E2E tests for concurrent fix attempts"
-    status: "pending"
+    status: "complete"
     deps:
       - "11.7"
       - "12.1"
@@ -1620,6 +1620,7 @@ steps:
       - test/e2e/concurrent-fix.test.ts
     context_files:
       - test/helpers/test-utils.ts
+    agent: codex
 
   - id: "12.6"
     description: "Create E2E tests for daemon lifecycle"

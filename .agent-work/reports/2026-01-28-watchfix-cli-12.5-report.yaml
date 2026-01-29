@@ -1,0 +1,14 @@
+step_id: "12.5"
+agent: codex
+outcome: success
+details: Added concurrent fix E2E coverage that spawns two fix processes,
+  verifies lock contention behavior, and asserts only one fix executes.
+timestamp: 2026-01-29T07:39:16.594Z
+artifacts:
+  - test/e2e/concurrent-fix.test.ts
+blocked_reason: null
+test_results: npm test (80 passed, 2 skipped)
+reviews:
+  - iteration: 1
+    approved: true
+    feedback: []
