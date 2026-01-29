@@ -149,6 +149,10 @@ Flags:
 - `--analyze-only`: Analyze all pending errors without applying fixes
 - `--reanalyze`: Force re-run analysis for all errors, even those already in `suggested` status
 
+> **Note:** `fix --all` excludes `failed` errors intentionally. Failed errors have exceeded max attempts and should be reviewed individually with `selfheal show <id>` before retrying.
+
+**Interrupt Handling:** SIGINT during `fix --all` cancels the current error's operation (same as `fix <id>`) and exits immediately without processing remaining errors. The interrupted error follows normal stale recovery on next run.
+
 #### `selfheal show <id>`
 
 Displays full details for an error:
@@ -847,6 +851,12 @@ Command output is limited by `logs.max_line_buffer` (default: 10000 lines). If o
 All log sources emit to a single serialized event queue:
 
 ```typescript
+// AsyncQueue is a simple async iterable queue - implement using:
+// - Array as buffer
+// - resolve() function to signal waiting consumers
+// - [Symbol.asyncIterator]() that yields from buffer or waits
+// Or use a library like 'p-queue' with concurrency: 1
+
 interface LogEvent {
   source: string;
   line: string;
@@ -896,6 +906,8 @@ Buffer flushes when:
 - A new error line is detected
 - A non-continuation, non-error line is detected
 - 100ms passes with no new input
+
+> **Line Length Limit:** Individual log lines exceeding 64KB are truncated with `... [truncated]` suffix. This prevents memory exhaustion from malformed logs.
 
 ### Context Window
 
@@ -1176,10 +1188,11 @@ The agent receives instructions via context files, avoiding command-line size li
 ├── daemon.log
 ├── daemon.log.1          # Rotated logs
 └── context/
-    ├── 2025-01-27-error-1-attempt-0.md              # Input for agent (attempt 0)
-    ├── 2025-01-27-error-1-attempt-0-analysis.yaml   # Analysis output
-    ├── 2025-01-27-error-1-attempt-0-result.yaml     # Fix output
-    ├── 2025-01-28-error-1-attempt-1.md              # Retry on different day
+    ├── 2025-01-27-error-1-attempt-0-analyze.md     # Analysis phase input
+    ├── 2025-01-27-error-1-attempt-0-analysis.yaml  # Analysis phase output
+    ├── 2025-01-27-error-1-attempt-0-fix.md         # Fix phase input (includes analysis)
+    ├── 2025-01-27-error-1-attempt-0-result.yaml    # Fix phase output
+    ├── 2025-01-28-error-1-attempt-1-analyze.md     # Retry on different day
     └── 2025-01-28-error-1-attempt-1-analysis.yaml
 ```
 
@@ -1187,7 +1200,7 @@ Context files are prefixed with the creation date (`YYYY-MM-DD`) and include the
 
 #### Context File Format (Analysis Phase)
 
-`.selfheal/context/{date}-error-{id}-attempt-{attempt}.md`:
+`.selfheal/context/{date}-error-{id}-attempt-{attempt}-analyze.md`:
 
 ```markdown
 # Self-Heal Task
@@ -1256,6 +1269,8 @@ confidence: high | medium | low
 ```
 
 #### Context File Format (Fix Phase)
+
+`.selfheal/context/{date}-error-{id}-attempt-{attempt}-fix.md`:
 
 For fix mode, the context includes the previous analysis:
 
@@ -1405,13 +1420,15 @@ function validateFixOutput(data: unknown): asserts data is FixOutput {
 
 Context files are cleaned based on age:
 
-- Files are named with date and attempt: `2025-01-27-error-1-attempt-0.md`
+- Files are named with date, attempt, and phase: `2025-01-27-error-1-attempt-0-analyze.md`, `2025-01-27-error-1-attempt-0-fix.md`
 - `cleanup.context_max_age_days` controls retention (default: 7 days)
 - `selfheal clean` removes files older than the configured age
 - `selfheal clean --dry-run` shows what would be removed
-- Context files for errors in `analyzing` or `fixing` status are **never deleted**, regardless of age
+- Context files for errors in `analyzing` or `fixing` status are **never deleted**, regardless of age (this includes both `-analyze.md` and `-fix.md` files for the error)
 
 The date prefix is the date the context file is created (not when the error was detected). For retries, a new context file is created with the current date and incremented attempt number. Old context files for the same error remain until cleaned by age.
+
+> **Size Limit:** Context files are limited to 256KB. If `raw_log` exceeds this, older context lines are trimmed with a note: `[...N lines truncated...]`
 
 ---
 
@@ -1428,7 +1445,7 @@ After a fix is applied:
    - Timeout: `test_command_timeout` per command (default: 5m)
 3. **Health checks**: HTTP GET each URL in `health_checks`
    - Expect 2xx response (200-299)
-   - Follows redirects (up to 5 hops)
+   - Follows redirects (up to 5 hops). If the 5th response is still a redirect, treat as failure with message "Too many redirects"
    - Sends `User-Agent: selfheal/1.0` header
    - Does not send request body
    - Timeout: `health_check_timeout` (default: 10s) per check
@@ -1486,6 +1503,8 @@ When verification fails:
 ## Storage
 
 All data stored in `.selfheal/` in project root.
+
+> **Initialization Timing:** The `.selfheal/` directory and `errors.db` database are created lazily on first command that requires them (`watch`, `status`, `fix`, `show`, `logs`, `clean`). The `init` command only creates `selfheal.yaml`.
 
 ### Database Configuration
 
@@ -2572,6 +2591,26 @@ Skipping (in-progress errors):
 $ selfheal clean
 Remove 23 files (1.2 MB)? [y/N] y
 Removed 23 files (1.2 MB)
+```
+
+---
+
+## Build Configuration
+
+```json
+{
+  "name": "selfheal",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": { "selfheal": "./dist/cli/index.js" },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "lint": "eslint src test"
+  },
+  "engines": { "node": ">=18" }
+}
 ```
 
 ---
