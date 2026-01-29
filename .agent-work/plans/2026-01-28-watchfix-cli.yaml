@@ -532,7 +532,7 @@ steps:
 
   - id: "4.1"
     description: "Create error pattern matching and type extraction"
-    status: "pending"
+    status: "complete"
     deps:
       - "0.2"
       - "1.3"
@@ -568,6 +568,7 @@ steps:
       Test with real log samples from JavaScript, Python, Go, and Docker.
       Note: Tests are in test/unit/parser.test.ts (covers both patterns.ts
       and parser.ts per spec).
+    agent: codex
 
   - id: "4.2"
     description: "Create multi-line parser with stack trace handling"
