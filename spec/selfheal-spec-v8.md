@@ -83,6 +83,7 @@ selfheal monitors application logs, detects errors using pattern matching, and d
 | 1 | General error (config invalid, agent failed, etc.) |
 | 2 | Watcher state conflict (already running / not running) |
 | 3 | Target not actionable (error not found, wrong status, locked) |
+| 4 | Database schema mismatch (requires migration) |
 | 130 | Interrupted by user (SIGINT) |
 
 ### Command Details
@@ -113,6 +114,8 @@ Starts watching configured log sources. Behavior:
 | `--daemon --autonomous` | Background, autonomous mode. (Linux/macOS only) |
 
 On Windows, `--daemon` exits with an error message directing users to use foreground mode or a process manager like PM2.
+
+> **Note:** The daemon reads configuration once at startup. To apply config changes, run `selfheal stop` and restart with `selfheal watch`.
 
 #### `selfheal fix <id>`
 
@@ -427,6 +430,7 @@ Configuration is validated using Zod on load. Validation includes:
 - Duration strings are parseable
 - Numeric values are positive integers where required
 - Paths are accessible (warning if not, will wait for creation)
+- Validate `project.root` resolves to an existing directory (error if not found)
 
 ### Default Agent Configurations
 
@@ -1964,18 +1968,29 @@ If the daemon crashes mid-fix (SIGKILL, power loss, etc.), errors may be left in
 ```typescript
 function recoverStaleErrors(): void {
   const staleThreshold = new Date(Date.now() - LOCK_TIMEOUT_MS).toISOString();
-  
+  const now = new Date().toISOString();
+
   // Reset stuck errors with expired locks back to pending
-  const result = db.run(`
+  const result1 = db.run(`
     UPDATE errors
     SET status = 'pending', locked_by = NULL, locked_at = NULL, updated_at = ?
     WHERE status IN ('analyzing', 'fixing')
       AND locked_at < ?
-  `, [new Date().toISOString(), staleThreshold]);
-  
-  if (result.changes > 0) {
-    logger.warn(`Recovered ${result.changes} stale error(s) from previous crash`);
-    logActivity('stale_recovery', null, { count: result.changes });
+  `, [now, staleThreshold]);
+
+  // Clear stale locks on suggested errors (don't change status)
+  const result2 = db.run(`
+    UPDATE errors
+    SET locked_by = NULL, locked_at = NULL, updated_at = ?
+    WHERE status = 'suggested'
+      AND locked_by IS NOT NULL
+      AND locked_at < ?
+  `, [now, staleThreshold]);
+
+  const total = result1.changes + result2.changes;
+  if (total > 0) {
+    logger.warn(`Recovered ${result1.changes} stale error(s), cleared ${result2.changes} stale lock(s)`);
+    logActivity('stale_recovery', null, { reset: result1.changes, unlocked: result2.changes });
   }
 }
 ```
@@ -2340,7 +2355,7 @@ export default defineConfig({
     },
     testTimeout: 10000,
     hookTimeout: 10000,
-    // Run E2E tests serially (they use real filesystem)
+    // Run all tests serially (required for E2E filesystem isolation)
     sequence: {
       concurrent: false,
     },
@@ -2600,12 +2615,13 @@ Summary:
 ```bash
 $ selfheal clean --dry-run
 Would remove context files older than 7 days:
-  2025-01-15-error-1.md
-  2025-01-15-error-1-analysis.yaml
-  2025-01-15-error-1-result.yaml
-  2025-01-18-error-3.md
-  2025-01-18-error-3-analysis.yaml
-  ... (18 more files)
+  2025-01-15-error-1-attempt-0-analyze.md
+  2025-01-15-error-1-attempt-0-analysis.yaml
+  2025-01-15-error-1-attempt-0-fix.md
+  2025-01-15-error-1-attempt-0-result.yaml
+  2025-01-18-error-3-attempt-0-analyze.md
+  2025-01-18-error-3-attempt-0-analysis.yaml
+  ... (17 more files)
 Total: 23 files (1.2 MB)
 
 Skipping (in-progress errors):
