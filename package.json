@@ -12,6 +12,12 @@
     "lint": "eslint .",
     "format": "prettier -w ."
   },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "package.json"
+  ],
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "chokidar": "^3.6.0",
