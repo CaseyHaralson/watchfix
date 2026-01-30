@@ -47,5 +47,7 @@ feat!: breaking change description
 6. Update CHANGELOG.md (move Unreleased to new version section with date)
 7. `git commit -am "chore: prepare release vX.Y.Z"`
 8. `git push -u origin release/vX.Y.Z && gh pr create`
-9. After merge: `git tag vX.Y.Z && git push origin vX.Y.Z`
-10. Remind user to `npm publish`
+9. After merge: `git checkout main && git pull origin main`
+10. `git tag vX.Y.Z && git push origin vX.Y.Z`
+11. Create GitHub release: `gh release create vX.Y.Z --title "vX.Y.Z" --notes-from-tag` (use changelog notes for body)
+12. Remind user to `npm publish`
