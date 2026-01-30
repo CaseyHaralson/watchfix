@@ -20,8 +20,25 @@ confidence: high
 
     const parsed = parseAnalysisOutput(yaml);
 
+    expect(parsed.already_fixed).toBe(false);
     expect(parsed.summary).toContain('PostgreSQL');
     expect(parsed.files_to_modify).toEqual(['docker-compose.yaml', '.env']);
+    expect(parsed.confidence).toBe('high');
+  });
+
+  it('parses already_fixed analysis output', () => {
+    const yaml = `already_fixed: true
+summary: The syntax error was already corrected by a previous fix
+confidence: high
+`;
+
+    const parsed = parseAnalysisOutput(yaml);
+
+    expect(parsed.already_fixed).toBe(true);
+    expect(parsed.summary).toContain('already corrected');
+    expect(parsed.root_cause).toBe('');
+    expect(parsed.suggested_fix).toBe('');
+    expect(parsed.files_to_modify).toEqual([]);
     expect(parsed.confidence).toBe('high');
   });
 

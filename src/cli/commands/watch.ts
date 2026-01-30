@@ -281,6 +281,7 @@ export const watchCommand = async (options: WatchOptions): Promise<void> => {
   );
 
   await watcher.start();
+  logger.info('Watching for errors... (Ctrl+C to stop)');
 
   if (options.autonomous) {
     void fixQueue?.processQueueIfReady();

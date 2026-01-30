@@ -175,16 +175,24 @@ ${options.contextBlock}
 
 ## Instructions
 
-1. Investigate the project structure to understand the codebase
-2. Identify the root cause of this error
-3. Determine what files need to be modified
-4. Assess your confidence in the fix
+1. **First, check if this issue still exists in the code**
+   - Look at the file(s) mentioned in the stack trace
+   - Determine if the error condition is still present
+   - If the code has been modified and the issue is gone, report it as already_fixed
+
+2. If the issue still exists:
+   - Investigate the project structure to understand the codebase
+   - Identify the root cause of this error
+   - Determine what files need to be modified
+   - Assess your confidence in the fix
 
 Write your analysis to: \`${analysisPath}\`
 
 Use this exact YAML format:
 \`\`\`yaml
-summary: One sentence summary of the problem
+already_fixed: true | false
+summary: One sentence summary of the problem (or that it was already fixed)
+# The following fields are only required if already_fixed is false:
 root_cause: |
   Detailed explanation of root cause
   Can be multiple lines
@@ -201,6 +209,7 @@ confidence: high | medium | low
 - Do NOT modify any files during analysis
 - If you cannot determine the cause, set confidence to "low"
 - Be specific about file paths relative to project root
+- Set already_fixed to true if the issue no longer exists in the code (e.g., fixed by a previous error fix)
 - WARNING: If a fix fails and is retried, any file modifications from previous attempts will persist
 `;
 };

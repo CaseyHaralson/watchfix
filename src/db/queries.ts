@@ -47,6 +47,7 @@ export type ActivityAction =
   | 'analysis_complete'
   | 'analysis_failed'
   | 'analysis_timeout'
+  | 'already_fixed_detected'
   | 'fix_start'
   | 'fix_complete'
   | 'fix_failed'

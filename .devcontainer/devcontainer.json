@@ -1,5 +1,5 @@
 {
-  "name": "Orrery Dev Container",
+  "name": "watchfix Dev Container",
   "build": {
     "dockerfile": "Dockerfile",
     "args": {
@@ -43,7 +43,7 @@
   },
   "remoteUser": "vscode",
   "mounts": [
-    "source=orrery-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
+    "source=watchfix-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
     "source=shared-sandbox-claude-code-config,target=/home/vscode/.claude,type=volume",
     "source=shared-sandbox-codex-config,target=/home/vscode/.codex,type=volume",
     "source=shared-sandbox-gemini-config,target=/home/vscode/.gemini,type=volume"

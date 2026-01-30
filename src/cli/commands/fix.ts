@@ -7,7 +7,8 @@ import { Database } from '../../db/index.js';
 import { getError, getErrorsByStatus, type ErrorRecord } from '../../db/queries.js';
 import { checkSchemaVersion, initializeSchema } from '../../db/schema.js';
 import { FixOrchestrator, type FixResult } from '../../fixer/index.js';
-import type { AnalysisOutput } from '../../fixer/output.js';
+import type { AnalysisOutput, FixOutput } from '../../fixer/output.js';
+import type { VerificationResult } from '../../fixer/verifier.js';
 import { EXIT_CODES, type ErrorStatus, UserError } from '../../utils/errors.js';
 import { Logger, type Verbosity } from '../../utils/logger.js';
 import { isOurProcess } from '../../utils/process.js';
@@ -31,7 +32,7 @@ type WatcherStateRow = {
   command_line: string;
 };
 
-type FixOutcome = 'fixed' | 'failed' | 'skipped' | 'analysis';
+type FixOutcome = 'fixed' | 'failed' | 'skipped' | 'analysis' | 'resolved';
 
 const FIXABLE_STATUSES: ErrorStatus[] = ['pending', 'suggested'];
 
@@ -74,14 +75,37 @@ const parseStoredAnalysis = (value: string | null): AnalysisOutput | null => {
     if (
       !parsed ||
       typeof parsed.summary !== 'string' ||
-      typeof parsed.root_cause !== 'string' ||
-      typeof parsed.suggested_fix !== 'string' ||
-      !Array.isArray(parsed.files_to_modify) ||
       typeof parsed.confidence !== 'string'
     ) {
       return null;
     }
-    return parsed;
+    // For already_fixed analyses, root_cause/suggested_fix/files_to_modify may be empty
+    if (parsed.already_fixed === true) {
+      return {
+        already_fixed: true,
+        summary: parsed.summary,
+        root_cause: parsed.root_cause ?? '',
+        suggested_fix: parsed.suggested_fix ?? '',
+        files_to_modify: parsed.files_to_modify ?? [],
+        confidence: parsed.confidence,
+      };
+    }
+    // For regular analyses, ensure all fields are present
+    if (
+      typeof parsed.root_cause !== 'string' ||
+      typeof parsed.suggested_fix !== 'string' ||
+      !Array.isArray(parsed.files_to_modify)
+    ) {
+      return null;
+    }
+    return {
+      already_fixed: parsed.already_fixed ?? false,
+      summary: parsed.summary,
+      root_cause: parsed.root_cause,
+      suggested_fix: parsed.suggested_fix,
+      files_to_modify: parsed.files_to_modify,
+      confidence: parsed.confidence,
+    };
   } catch {
     return null;
   }
@@ -90,6 +114,11 @@ const parseStoredAnalysis = (value: string | null): AnalysisOutput | null => {
 const formatAnalysisSummary = (analysis: AnalysisOutput): string[] => {
   const lines = ['Analysis summary:'];
   lines.push(`  Summary: ${analysis.summary}`);
+  if (analysis.already_fixed) {
+    lines.push('  Status: Issue already fixed (no action needed)');
+    lines.push(`  Confidence: ${analysis.confidence}`);
+    return lines;
+  }
   lines.push('  Root cause:');
   lines.push(...analysis.root_cause.split('\n').map((line) => `    ${line}`));
   lines.push('  Suggested fix:');
@@ -127,11 +156,107 @@ const promptForConfirmation = async (label: string): Promise<boolean> => {
   }
 };
 
-const formatFixFailure = (result: FixResult): string => {
-  if (result.verification?.failure) {
-    return result.verification.failure.message;
+const formatFilesChanged = (
+  files: FixOutput['files_changed'],
+  indent = '  '
+): string[] => {
+  if (!files || files.length === 0) {
+    return [`${indent}(no files changed)`];
   }
-  return result.message ?? 'Fix did not complete successfully.';
+  return files.map((f) => `${indent}- ${f.path}: ${f.change}`);
+};
+
+const formatVerificationSummary = (
+  result: VerificationResult | undefined,
+  verbosity: Verbosity
+): string[] => {
+  if (!result) {
+    return ['  Verification: not run'];
+  }
+  if (result.success) {
+    return ['  Verification: PASSED'];
+  }
+
+  const lines = ['  Verification: FAILED'];
+  if (result.failure) {
+    lines.push(`    ${result.failure.message}`);
+    if (verbosity === 'verbose' && result.failure.type === 'command') {
+      const stdout = result.failure.stdout.trim();
+      const stderr = result.failure.stderr.trim();
+      if (stdout) {
+        lines.push('    stdout:');
+        lines.push(...stdout.split('\n').map((line) => `      ${line}`));
+      }
+      if (stderr) {
+        lines.push('    stderr:');
+        lines.push(...stderr.split('\n').map((line) => `      ${line}`));
+      }
+    }
+  }
+  return lines;
+};
+
+const formatStatusLine = (result: FixResult, maxAttempts: number): string => {
+  if (result.status === 'fixed') {
+    return 'Status: fixed';
+  }
+  if (result.status === 'resolved') {
+    return 'Status: resolved (issue already fixed)';
+  }
+  const retryInfo =
+    result.attempts < maxAttempts ? ', will retry' : ', max attempts reached';
+  return `Status: ${result.status} (attempt ${result.attempts} of ${maxAttempts}${retryInfo})`;
+};
+
+const formatFixOutcome = (
+  result: FixResult,
+  verbosity: Verbosity,
+  maxAttempts: number
+): string[] => {
+  if (verbosity === 'quiet') {
+    if (result.status === 'fixed') {
+      return [`Error #${result.errorId}: fixed`];
+    }
+    if (result.status === 'resolved') {
+      return [`Error #${result.errorId}: resolved (already fixed)`];
+    }
+    const mode = result.fix?.success ? 'verification' : 'agent';
+    return [`Error #${result.errorId}: failed (${mode})`];
+  }
+
+  const lines: string[] = [];
+
+  // Header
+  if (result.status === 'fixed') {
+    lines.push(`Error #${result.errorId}: Fix verified successfully`);
+  } else if (result.status === 'resolved') {
+    lines.push(`Error #${result.errorId}: Issue already fixed`);
+  } else if (!result.fix?.success) {
+    lines.push(`Error #${result.errorId}: Agent could not apply fix`);
+  } else {
+    lines.push(`Error #${result.errorId}: Fix attempt completed`);
+  }
+
+  // Agent details
+  if (result.fix) {
+    lines.push(`  Agent applied fix: ${result.fix.success ? 'yes' : 'no'}`);
+    if (result.fix.files_changed?.length) {
+      lines.push('  Files changed:');
+      lines.push(...formatFilesChanged(result.fix.files_changed, '    '));
+    }
+    if (result.fix.notes && (verbosity === 'verbose' || !result.fix.success)) {
+      lines.push(`  Agent notes: ${result.fix.notes}`);
+    }
+  }
+
+  // Verification
+  if (result.verification) {
+    lines.push(...formatVerificationSummary(result.verification, verbosity));
+  }
+
+  lines.push('');
+  lines.push(formatStatusLine(result, maxAttempts));
+  return lines;
 };
 
 const checkDaemonConflict = (db: Database, logger: Logger): boolean => {
@@ -197,7 +322,11 @@ const reportAnalysisFromResult = (
   reportAnalysis(errorId, analysis, note);
 };
 
-const reportFixResult = (result: FixResult): FixOutcome => {
+const reportFixResult = (
+  result: FixResult,
+  verbosity: Verbosity = 'normal',
+  maxAttempts = 3
+): FixOutcome => {
   if (!result.lockAcquired) {
     process.stdout.write(
       `Skipped error #${result.errorId}: already locked by another process.\n`
@@ -205,24 +334,31 @@ const reportFixResult = (result: FixResult): FixOutcome => {
     return 'skipped';
   }
 
+  const lines = formatFixOutcome(result, verbosity, maxAttempts);
+  process.stdout.write(`${lines.join('\n')}\n`);
+
   if (result.status === 'fixed') {
-    process.stdout.write(`✓ Error #${result.errorId} fixed successfully.\n`);
     return 'fixed';
   }
-
-  const message = formatFixFailure(result);
-  process.stdout.write(
-    `✗ Error #${result.errorId} not fixed (status=${result.status}).\n${message}\n`
-  );
+  if (result.status === 'resolved') {
+    return 'resolved';
+  }
   return 'failed';
+};
+
+type FixContext = {
+  verbosity: Verbosity;
+  maxAttempts: number;
 };
 
 const runSingleFix = async (
   db: Database,
   error: ErrorRecord,
   options: FixOptions,
-  orchestrator: FixOrchestrator
+  orchestrator: FixOrchestrator,
+  ctx: FixContext
 ): Promise<FixOutcome> => {
+  const { verbosity, maxAttempts } = ctx;
   const reanalyze = Boolean(options.reanalyze);
   const analyzeOnly = Boolean(options.analyzeOnly);
   const shouldPrompt = !options.yes && !analyzeOnly;
@@ -235,11 +371,11 @@ const runSingleFix = async (
     });
     if (!result.lockAcquired) {
       process.exitCode = EXIT_CODES.NOT_ACTIONABLE;
-      return reportFixResult(result);
+      return reportFixResult(result, verbosity, maxAttempts);
     }
     if (result.status !== 'suggested') {
       process.exitCode = EXIT_CODES.GENERAL_ERROR;
-      reportFixResult(result);
+      reportFixResult(result, verbosity, maxAttempts);
       return 'failed';
     }
     reportAnalysis(
@@ -263,7 +399,7 @@ const runSingleFix = async (
 
       if (!analysisResult.lockAcquired) {
         process.exitCode = EXIT_CODES.NOT_ACTIONABLE;
-        return reportFixResult(analysisResult);
+        return reportFixResult(analysisResult, verbosity, maxAttempts);
       }
 
       analysisNote = analysisResult.message;
@@ -273,7 +409,7 @@ const runSingleFix = async (
 
       if (analysisResult.status !== 'suggested') {
         process.exitCode = EXIT_CODES.GENERAL_ERROR;
-        return reportFixResult(analysisResult);
+        return reportFixResult(analysisResult, verbosity, maxAttempts);
       }
 
       reanalyzeForFix = false;
@@ -299,22 +435,24 @@ const runSingleFix = async (
   });
   if (!result.lockAcquired) {
     process.exitCode = EXIT_CODES.NOT_ACTIONABLE;
-    return reportFixResult(result);
+    return reportFixResult(result, verbosity, maxAttempts);
   }
 
   reportAnalysisFromResult(db, error.id, result);
 
-  if (result.status !== 'fixed') {
+  if (result.status !== 'fixed' && result.status !== 'resolved') {
     process.exitCode = EXIT_CODES.GENERAL_ERROR;
   }
-  return reportFixResult(result);
+  return reportFixResult(result, verbosity, maxAttempts);
 };
 
 const runAllFixes = async (
   db: Database,
   options: FixOptions,
-  orchestrator: FixOrchestrator
+  orchestrator: FixOrchestrator,
+  ctx: FixContext
 ): Promise<void> => {
+  const { verbosity, maxAttempts } = ctx;
   const errors = getErrorsByStatus(db, FIXABLE_STATUSES);
   if (errors.length === 0) {
     process.stdout.write('No pending or suggested errors to fix.\n');
@@ -329,6 +467,7 @@ const runAllFixes = async (
   let failedCount = 0;
   let skippedCount = 0;
   let analyzedCount = 0;
+  let resolvedCount = 0;
 
   for (const error of errors) {
     const fixabilityIssue = ensureFixable(error);
@@ -345,12 +484,17 @@ const runAllFixes = async (
       });
       if (!result.lockAcquired) {
         skippedCount += 1;
-        reportFixResult(result);
+        reportFixResult(result, verbosity, maxAttempts);
+        continue;
+      }
+      if (result.status === 'resolved') {
+        resolvedCount += 1;
+        reportFixResult(result, verbosity, maxAttempts);
         continue;
       }
       if (result.status !== 'suggested') {
         failedCount += 1;
-        reportFixResult(result);
+        reportFixResult(result, verbosity, maxAttempts);
         continue;
       }
       reportAnalysis(
@@ -374,16 +518,21 @@ const runAllFixes = async (
         });
         if (!analysisResult.lockAcquired) {
           skippedCount += 1;
-          reportFixResult(analysisResult);
+          reportFixResult(analysisResult, verbosity, maxAttempts);
           continue;
         }
         note = analysisResult.message;
         analysis =
           analysisResult.analysis ??
           parseStoredAnalysis(getError(db, error.id)?.suggestion ?? null);
+        if (analysisResult.status === 'resolved') {
+          resolvedCount += 1;
+          reportFixResult(analysisResult, verbosity, maxAttempts);
+          continue;
+        }
         if (analysisResult.status !== 'suggested') {
           failedCount += 1;
-          reportFixResult(analysisResult);
+          reportFixResult(analysisResult, verbosity, maxAttempts);
           continue;
         }
         reanalyzeForFix = false;
@@ -409,22 +558,24 @@ const runAllFixes = async (
       });
       if (!result.lockAcquired) {
         skippedCount += 1;
-        reportFixResult(result);
+        reportFixResult(result, verbosity, maxAttempts);
         continue;
       }
       if (result.status === 'fixed') {
         fixedCount += 1;
+      } else if (result.status === 'resolved') {
+        resolvedCount += 1;
       } else {
         failedCount += 1;
       }
-      reportFixResult(result);
+      reportFixResult(result, verbosity, maxAttempts);
       continue;
     }
 
     const result = await orchestrator.fixError(error.id, { reanalyze });
     if (!result.lockAcquired) {
       skippedCount += 1;
-      reportFixResult(result);
+      reportFixResult(result, verbosity, maxAttempts);
       continue;
     }
 
@@ -432,15 +583,18 @@ const runAllFixes = async (
 
     if (result.status === 'fixed') {
       fixedCount += 1;
+    } else if (result.status === 'resolved') {
+      resolvedCount += 1;
     } else {
       failedCount += 1;
     }
-    reportFixResult(result);
+    reportFixResult(result, verbosity, maxAttempts);
   }
 
+  const resolvedSuffix = resolvedCount > 0 ? `, resolved ${resolvedCount}` : '';
   const summary = analyzeOnly
-    ? `Analyzed ${analyzedCount} errors, failed ${failedCount}, skipped ${skippedCount}.`
-    : `Summary: fixed ${fixedCount}, failed ${failedCount}, skipped ${skippedCount}.`;
+    ? `Analyzed ${analyzedCount} errors, failed ${failedCount}, skipped ${skippedCount}${resolvedSuffix}.`
+    : `Summary: fixed ${fixedCount}, failed ${failedCount}, skipped ${skippedCount}${resolvedSuffix}.`;
   process.stdout.write(`${summary}\n`);
 
   if (!analyzeOnly && failedCount > 0) {
@@ -488,8 +642,13 @@ export const fixCommand = async (
       terminalEnabled: true,
     });
 
+    const ctx: FixContext = {
+      verbosity,
+      maxAttempts: config.limits.max_attempts_per_error,
+    };
+
     if (options.all) {
-      await runAllFixes(db, options, orchestrator);
+      await runAllFixes(db, options, orchestrator, ctx);
       return;
     }
 
@@ -508,7 +667,7 @@ export const fixCommand = async (
       return;
     }
 
-    await runSingleFix(db, error, options, orchestrator);
+    await runSingleFix(db, error, options, orchestrator, ctx);
   } finally {
     db.close();
   }

@@ -5,6 +5,7 @@ import { UserError } from '../utils/errors.js';
 type ConfidenceLevel = 'high' | 'medium' | 'low';
 
 type AnalysisOutput = {
+  already_fixed: boolean;
   summary: string;
   root_cause: string;
   suggested_fix: string;
@@ -116,13 +117,27 @@ const parseAnalysisOutput = (content: string): AnalysisOutput => {
   const raw = parseYaml(content);
   const data = assertRecord(raw);
 
+  const already_fixed = data.already_fixed === true;
   const summary = requireStringField(data, 'summary');
+  const confidence = validateConfidence(data.confidence);
+
+  if (already_fixed) {
+    return {
+      already_fixed: true,
+      summary,
+      root_cause: '',
+      suggested_fix: '',
+      files_to_modify: [],
+      confidence,
+    };
+  }
+
   const root_cause = requireStringField(data, 'root_cause');
   const suggested_fix = requireStringField(data, 'suggested_fix');
   const files_to_modify = requireStringArrayField(data, 'files_to_modify');
-  const confidence = validateConfidence(data.confidence);
 
   return {
+    already_fixed: false,
     summary,
     root_cause,
     suggested_fix,

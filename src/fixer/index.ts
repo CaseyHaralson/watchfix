@@ -83,14 +83,37 @@ const parseSuggestion = (value: string): AnalysisOutput => {
   if (
     !parsed ||
     typeof parsed.summary !== 'string' ||
-    typeof parsed.root_cause !== 'string' ||
-    typeof parsed.suggested_fix !== 'string' ||
-    !Array.isArray(parsed.files_to_modify) ||
     typeof parsed.confidence !== 'string'
   ) {
     throw new UserError('Stored analysis output is invalid');
   }
-  return parsed;
+  // For already_fixed analyses, other fields may be empty
+  if (parsed.already_fixed === true) {
+    return {
+      already_fixed: true,
+      summary: parsed.summary,
+      root_cause: parsed.root_cause ?? '',
+      suggested_fix: parsed.suggested_fix ?? '',
+      files_to_modify: parsed.files_to_modify ?? [],
+      confidence: parsed.confidence,
+    };
+  }
+  // For regular analyses, ensure all fields are present
+  if (
+    typeof parsed.root_cause !== 'string' ||
+    typeof parsed.suggested_fix !== 'string' ||
+    !Array.isArray(parsed.files_to_modify)
+  ) {
+    throw new UserError('Stored analysis output is invalid');
+  }
+  return {
+    already_fixed: parsed.already_fixed ?? false,
+    summary: parsed.summary,
+    root_cause: parsed.root_cause,
+    suggested_fix: parsed.suggested_fix,
+    files_to_modify: parsed.files_to_modify,
+    confidence: parsed.confidence,
+  };
 };
 
 export class FixOrchestrator {
@@ -223,6 +246,46 @@ export class FixOrchestrator {
 
         if (analysisResult.success) {
           analysisOutput = analysisResult.data;
+
+          if (analysisOutput.already_fixed) {
+            if (
+              !transitionStatus(this.db, errorId, 'analyzing', 'resolved', lockId)
+            ) {
+              throw new UserError(
+                `Failed to transition error ${errorId} into resolved status`
+              );
+            }
+
+            this.db.run(
+              'UPDATE errors SET suggestion = ?, updated_at = ? WHERE id = ?',
+              [
+                JSON.stringify(analysisOutput),
+                new Date().toISOString(),
+                errorId,
+              ]
+            );
+
+            logActivity(
+              this.db,
+              'already_fixed_detected',
+              errorId,
+              JSON.stringify({
+                attempt: attempts,
+                summary: analysisOutput.summary,
+              })
+            );
+
+            await releaseLock(this.db, errorId, lockId);
+            lockHeld = false;
+            return {
+              errorId,
+              status: 'resolved',
+              lockAcquired: true,
+              attempts,
+              analysis: analysisOutput,
+              message: 'Issue already fixed',
+            };
+          }
 
           if (
             !transitionStatus(this.db, errorId, 'analyzing', 'suggested', lockId)
