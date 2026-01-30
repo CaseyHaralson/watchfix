@@ -44,6 +44,15 @@ const CONTINUATION_PATTERNS: ReadonlyArray<RegExp> = [
 const isContinuationLine = (line: string): boolean =>
   CONTINUATION_PATTERNS.some((pattern) => pattern.test(line));
 
+const extractCoreMessage = (line: string): string => {
+  // "TypeError: Cannot read..." → "Cannot read..."
+  const colonIndex = line.indexOf(': ');
+  if (colonIndex > 0 && colonIndex < 30) {
+    return line.slice(colonIndex + 2).trim();
+  }
+  return line.trim();
+};
+
 const truncateLine = (line: string): string => {
   if (line.length <= MAX_LINE_LENGTH) {
     return line;
@@ -108,6 +117,22 @@ export class ErrorParser {
     }
 
     if (isError) {
+      // Check if this is the same error with a more specific type
+      if (this.current && this.current.stackLines.length === 0) {
+        const currentCore = extractCoreMessage(this.current.message);
+        const newCore = extractCoreMessage(line);
+        if (currentCore === newCore) {
+          // Same error - discard shallow entry, use the more detailed one
+          if (this.flushTimer) {
+            clearTimeout(this.flushTimer);
+            this.flushTimer = undefined;
+          }
+          this.current = undefined;
+          this.startError(event, line);
+          return;
+        }
+      }
+
       await this.flushCurrent('new_error');
       this.startError(event, line);
       return;
