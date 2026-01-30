@@ -31,6 +31,7 @@ export type FixResult = {
   fix?: FixOutput;
   verification?: VerificationResult;
   message?: string;
+  diagnostic?: string;
 };
 
 type FixOrchestratorOptions = {
@@ -385,6 +386,7 @@ export class FixOrchestrator {
             lockAcquired: true,
             attempts,
             message: 'Analysis failed',
+            diagnostic: analysisResult.diagnostic,
           };
         }
       } else if (analyzeOnly) {
@@ -547,6 +549,7 @@ export class FixOrchestrator {
           attempts,
           analysis: analysisOutput,
           message: 'Fix failed',
+          diagnostic: fixResult.diagnostic,
         };
       }
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Duplicate error entries when logs contain both generic (e.g., `Error:`) and specific (e.g., `TypeError:`) error lines for the same error
+- Unhelpful "Agent could not apply fix" message now shows reason (timeout, exit code) when agent fails
+
 ## [0.2.0] - 2026-01-29
 
 ### Added

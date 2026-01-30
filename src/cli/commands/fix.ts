@@ -233,6 +233,14 @@ const formatFixOutcome = (
     lines.push(`Error #${result.errorId}: Issue already fixed`);
   } else if (!result.fix?.success) {
     lines.push(`Error #${result.errorId}: Agent could not apply fix`);
+    if (result.diagnostic) {
+      // Extract key info from diagnostic
+      const diagLines = result.diagnostic.split('\n');
+      const reason = diagLines.find(l => l.includes('timed out') || l.includes('Exit code'));
+      if (reason) {
+        lines.push(`  Reason: ${reason.trim()}`);
+      }
+    }
   } else {
     lines.push(`Error #${result.errorId}: Fix attempt completed`);
   }
