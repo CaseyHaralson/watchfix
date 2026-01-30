@@ -94,6 +94,8 @@ watchfix fix <error-id>
 
 For detailed configuration options and advanced usage, see the [specification document](./spec/watchfix-spec-v8.md).
 
+For a working example project, see [watchfix-example](https://github.com/CaseyHaralson/watchfix-example).
+
 ## License
 
 [MIT](./LICENSE)
