@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-01-30
+
 ### Fixed
 
 - Duplicate error entries when logs contain both generic (e.g., `Error:`) and specific (e.g., `TypeError:`) error lines for the same error
