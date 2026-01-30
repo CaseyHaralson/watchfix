@@ -64,12 +64,28 @@ watchfix watch
 watchfix fix <error-id>
 ```
 
+## Autonomous Mode
+
+For fully automated error fixing without manual approval:
+
+```bash
+watchfix watch --autonomous
+```
+
+In autonomous mode, watchfix automatically dispatches AI agents to fix detected errors. Combine with daemon mode for background operation (Linux/macOS):
+
+```bash
+watchfix watch --daemon --autonomous
+```
+
+**Note:** Manual `watchfix fix` commands are blocked while running in autonomous mode.
+
 ## CLI Commands
 
 | Command | Description |
 |---------|-------------|
 | `watchfix init` | Create `watchfix.yaml` in current directory |
-| `watchfix watch` | Watch logs in foreground (use `--daemon` for background) |
+| `watchfix watch` | Watch logs in foreground (use `--daemon` for background, `--autonomous` for auto-fix) |
 | `watchfix fix [id]` | Analyze and fix a specific error (or `--all` for all pending) |
 | `watchfix show <id>` | Show full error details and analysis |
 | `watchfix status` | Show watcher state and pending errors |
