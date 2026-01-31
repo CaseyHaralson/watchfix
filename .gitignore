@@ -2,3 +2,4 @@ node_modules/
 dist/
 .watchfix/
 .claude
+*watchfix*.tgz
