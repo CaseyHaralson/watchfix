@@ -175,16 +175,30 @@ ${options.contextBlock}
 
 ## Instructions
 
-1. **First, check if this issue still exists in the code**
+1. **Check if this issue still exists in the code**
    - Look at the file(s) mentioned in the stack trace
-   - Determine if the error condition is still present
-   - If the code has been modified and the issue is gone, report it as already_fixed
+   - If the code has been fixed, report already_fixed: true
 
-2. If the issue still exists:
-   - Investigate the project structure to understand the codebase
-   - Identify the root cause of this error
-   - Determine what files need to be modified
-   - Assess your confidence in the fix
+2. **Trace the root cause** (not just the symptom):
+   - Ask WHY the error occurs, not just WHERE
+   - Common root causes to check:
+     - Type mismatches in comparisons (e.g., comparing incompatible types)
+     - Failed lookups due to incorrect comparison logic
+     - Missing type conversions on input values
+   - Follow the data flow from source to error location
+   - The fix should address the underlying cause, not just guard against the symptom
+
+3. **Determine the minimal fix location**:
+   - Fix at the point where the bug originates, not where it manifests
+   - For type issues: convert types at the source
+   - For unhandled errors: add error handling at the CALL SITE only
+   - Do NOT modify functions that throw errors - handle errors where they are called
+
+## Anti-patterns to Avoid
+- Adding null/undefined checks that mask the real bug (e.g., the check passes but the lookup logic is still wrong)
+- Modifying error-throwing functions instead of handling at call sites
+- Adding environment variables, feature flags, or extra parameters
+- Refactoring or improving code beyond the specific fix
 
 Write your analysis to: \`${analysisPath}\`
 
@@ -277,8 +291,13 @@ notes: |
 \`\`\`
 
 ## Constraints
-- Make the smallest change that resolves the issue
-- Do NOT change unrelated code
+- Make the SMALLEST change that fixes the ROOT CAUSE
+- Fix the bug where it originates, not where symptoms appear
+- Do NOT add defensive checks that mask the real bug
+- Do NOT modify functions that throw errors - add handling at call sites
+- Do NOT add environment variables, feature flags, or new parameters
+- Do NOT refactor, improve, or clean up code beyond the fix
+- If touching more than 1-2 files or 10 lines, reconsider your approach
 - If the fix cannot be applied, set success to false and explain in notes
 - WARNING: If this fix fails verification, the modified files will remain changed for the next retry attempt
 `;

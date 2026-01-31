@@ -16,13 +16,16 @@
 - test/: test suite
 
 ## Branching and PRs
-- Never commit directly to main
+- **CRITICAL: NEVER commit directly to main. ALWAYS create a branch FIRST.**
+- Before ANY commit, check current branch with `git branch --show-current`
+- If on main, STOP and create a branch BEFORE committing
 - Create descriptive branches (feat/*, fix/*, docs/*, chore/*, refactor/*, release/*)
 - Use `gh pr create` for PRs
 
 ## Working Agreement
 - After making changes, run `npm run lint`
 - Before committing, run `npm test && npm run build`
+- **Before committing, verify you are NOT on main: `git branch --show-current`**
 - Before committing, check if changes need CHANGELOG entry
 - Use conventional commit format: `type(scope): description`
 
