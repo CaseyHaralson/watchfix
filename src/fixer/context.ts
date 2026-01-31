@@ -3,6 +3,14 @@ import path from 'node:path';
 import type { Config } from '../config/schema.js';
 import type { ErrorRecord } from '../db/queries.js';
 
+type RetryContext = {
+  previousAttempt: {
+    analysis?: { summary: string; suggested_fix: string; files_to_modify: string[] };
+    fix?: { success: boolean; summary: string; files_changed?: Array<{ path: string; change: string }> };
+    verification_failure?: { type: string; command?: string; message?: string; stderr?: string };
+  };
+};
+
 type GeneratedContext = {
   path: string;
   content: string;
@@ -133,6 +141,54 @@ const truncateStackTraceToBytes = (
   return head ? `${head}\n${STACK_TRACE_TRUNCATION_MARKER}` : STACK_TRACE_TRUNCATION_MARKER;
 };
 
+const buildRetrySection = (retryContext: RetryContext, attempt: number): string => {
+  const { previousAttempt } = retryContext;
+  const lines: string[] = [
+    `## IMPORTANT: This is a RETRY (Attempt ${attempt + 1})`,
+    '',
+    'The previous fix attempt was applied but **verification failed**.',
+    '',
+    '### What was tried:',
+  ];
+
+  if (previousAttempt.analysis) {
+    lines.push(`- Analysis: ${previousAttempt.analysis.summary}`);
+    if (previousAttempt.analysis.files_to_modify.length > 0) {
+      lines.push(`- Files modified: ${previousAttempt.analysis.files_to_modify.join(', ')}`);
+    }
+  }
+  if (previousAttempt.fix) {
+    lines.push(`- Fix applied: ${previousAttempt.fix.summary}`);
+  }
+
+  lines.push('');
+  lines.push('### Why it failed:');
+
+  if (previousAttempt.verification_failure) {
+    const vf = previousAttempt.verification_failure;
+    lines.push(`**Verification command failed**: ${vf.command || 'unknown'}`);
+    lines.push(`**Message**: ${vf.message || 'unknown'}`);
+    if (vf.stderr) {
+      lines.push('**Test output**:');
+      lines.push('```');
+      lines.push(vf.stderr.slice(0, 2000));
+      lines.push('```');
+    }
+  } else {
+    lines.push('Verification failed (details not available)');
+  }
+
+  lines.push('');
+  lines.push('### Instructions for retry:');
+  lines.push('1. The code has ALREADY been modified by the previous attempt');
+  lines.push('2. Do NOT report already_fixed unless the verification test is actually passing');
+  lines.push('3. Focus on the verification failure output - it shows what\'s still broken');
+  lines.push('4. The original error message may not appear in code anymore, but the test is still failing');
+  lines.push('');
+
+  return lines.join('\n');
+};
+
 const buildAnalyzeContent = (options: {
   projectName: string;
   projectRoot: string;
@@ -141,11 +197,12 @@ const buildAnalyzeContent = (options: {
   date: string;
   stackTrace: string;
   contextBlock: string;
+  retryContext?: RetryContext;
 }): string => {
   const { projectName, projectRoot, error, attempt, date, stackTrace } = options;
   const analysisPath = path.posix.join(
     CONTEXT_DIR,
-    `${date}-error-${error.id}-attempt-${attempt}-analysis.yaml`
+    `${date}-error-${error.id}-attempt-${attempt + 1}-analysis.yaml`
   );
 
   return `# WatchFix Task
@@ -162,7 +219,7 @@ analyze
 - Source: ${error.source}
 - Type: ${error.errorType}
 - Detected: ${error.timestamp}
-- Fix Attempts: ${error.fixAttempts}
+- Fix Attempts: ${error.fixAttempts + 1}
 
 ### Message
 ${error.message}
@@ -172,7 +229,8 @@ ${stackTrace}
 
 ### Context (surrounding log lines)
 ${options.contextBlock}
-
+${options.retryContext ? `
+${buildRetrySection(options.retryContext, options.attempt)}` : ''}
 ## Instructions
 
 1. **Check if this issue still exists in the code**
@@ -241,7 +299,7 @@ const buildFixContent = (options: {
     options;
   const resultPath = path.posix.join(
     CONTEXT_DIR,
-    `${date}-error-${error.id}-attempt-${attempt}-result.yaml`
+    `${date}-error-${error.id}-attempt-${attempt + 1}-result.yaml`
   );
 
   return `# WatchFix Task
@@ -258,7 +316,7 @@ fix
 - Source: ${error.source}
 - Type: ${error.errorType}
 - Detected: ${error.timestamp}
-- Fix Attempts: ${error.fixAttempts}
+- Fix Attempts: ${error.fixAttempts + 1}
 
 ### Message
 ${error.message}
@@ -372,12 +430,13 @@ const ensureSizeLimit = (options: {
 export const generateAnalyzeContext = (
   error: ErrorRecord,
   config: Config,
-  attempt: number
+  attempt: number,
+  retryContext?: RetryContext
 ): GeneratedContext => {
   const date = formatDate();
   const contextPath = path.posix.join(
     CONTEXT_DIR,
-    `${date}-error-${error.id}-attempt-${attempt}-analyze.md`
+    `${date}-error-${error.id}-attempt-${attempt + 1}-analyze.md`
   );
   const maxBytes = config.cleanup.context_max_size_kb * 1024;
   const { before, after } = splitRawLog(error);
@@ -405,6 +464,7 @@ export const generateAnalyzeContext = (
         afterLines,
         truncated
       ),
+      retryContext,
     });
   };
 
@@ -500,7 +560,7 @@ export const generateFixContext = (
   const date = formatDate();
   const contextPath = path.posix.join(
     CONTEXT_DIR,
-    `${date}-error-${error.id}-attempt-${attempt}-fix.md`
+    `${date}-error-${error.id}-attempt-${attempt + 1}-fix.md`
   );
   const maxBytes = config.cleanup.context_max_size_kb * 1024;
   const stackTrace = truncateStackTrace(error.stackTrace ?? '');

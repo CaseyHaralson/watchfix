@@ -20,6 +20,18 @@ type FixOutput = {
   notes?: string;
 };
 
+type StoredFixResult = {
+  fix?: FixOutput;
+  verification_failure?: {
+    type: 'command' | 'health_check';
+    command?: string;
+    message?: string;
+    stderr?: string;
+  };
+  error?: boolean;
+  diagnostic?: string;
+};
+
 const parseYaml = (content: string): unknown => {
   try {
     return yaml.parse(content);
@@ -174,5 +186,5 @@ const parseFixOutput = (content: string): FixOutput => {
   };
 };
 
-export type { AnalysisOutput, FixOutput, ConfidenceLevel };
+export type { AnalysisOutput, FixOutput, ConfidenceLevel, StoredFixResult };
 export { parseAnalysisOutput, parseFixOutput };
