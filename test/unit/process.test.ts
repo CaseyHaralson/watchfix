@@ -60,13 +60,13 @@ describe('spawnWithTimeout', () => {
 
 describe('isOurProcess', () => {
   it('returns false for unrelated process', () => {
-    expect(isOurProcess(process.pid, process.cwd())).toBe(false);
+    expect(isOurProcess(process.pid)).toBe(false);
   });
 
-  it('returns true when command line matches', async () => {
+  it('returns true when command line contains watchfix', async () => {
     const child = spawn(
       process.execPath,
-      ['-e', 'setTimeout(() => {}, 10000)', 'watchfix', process.cwd()],
+      ['-e', 'setTimeout(() => {}, 10000)', 'watchfix'],
       { stdio: 'ignore' },
     );
     if (!child.pid) {
@@ -75,6 +75,21 @@ describe('isOurProcess', () => {
     spawned.push({ pid: child.pid, kill: () => child.kill('SIGKILL') });
 
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(isOurProcess(child.pid, process.cwd())).toBe(true);
+    expect(isOurProcess(child.pid)).toBe(true);
+  });
+
+  it('returns true when command line contains index.js (dev mode)', async () => {
+    const child = spawn(
+      process.execPath,
+      ['-e', 'setTimeout(() => {}, 10000)', 'index.js'],
+      { stdio: 'ignore' },
+    );
+    if (!child.pid) {
+      throw new Error('Failed to spawn child process');
+    }
+    spawned.push({ pid: child.pid, kill: () => child.kill('SIGKILL') });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(isOurProcess(child.pid)).toBe(true);
   });
 });

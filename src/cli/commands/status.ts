@@ -137,7 +137,7 @@ export const statusCommand = async (options: StatusOptions): Promise<void> => {
     const lines: string[] = [];
     const state = getWatcherState(db);
 
-    if (state && isOurProcess(state.pid, state.project_root)) {
+    if (state && isOurProcess(state.pid)) {
       const mode = state.autonomous ? 'autonomous' : 'manual';
       const uptime = formatUptime(state.started_at);
       lines.push(

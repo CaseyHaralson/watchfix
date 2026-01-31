@@ -676,11 +676,18 @@ export class FixOrchestrator {
             `Failed to transition error ${errorId} into fixed status`
           );
         }
+
+        const newAttempts = attempts + 1;
+        this.db.run(
+          'UPDATE errors SET fix_attempts = ?, updated_at = ? WHERE id = ?',
+          [newAttempts, new Date().toISOString(), errorId]
+        );
+
         logActivity(
           this.db,
           'verification_pass',
           errorId,
-          JSON.stringify({ attempt: attempts })
+          JSON.stringify({ attempt: newAttempts })
         );
 
         await releaseLock(this.db, errorId, lockId);
@@ -690,7 +697,7 @@ export class FixOrchestrator {
           errorId,
           status: 'fixed',
           lockAcquired: true,
-          attempts,
+          attempts: newAttempts,
           analysis: analysisOutput,
           fix: fixOutput,
           verification: verificationResult,

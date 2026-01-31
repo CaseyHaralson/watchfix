@@ -93,7 +93,7 @@ export const stopCommand = async (options: StopOptions): Promise<void> => {
       return;
     }
 
-    if (!isOurProcess(state.pid, state.project_root)) {
+    if (!isOurProcess(state.pid)) {
       process.stdout.write('Stale watcher state (process no longer exists).\n');
       clearWatcherState(db);
       process.exitCode = EXIT_CODES.WATCHER_CONFLICT;

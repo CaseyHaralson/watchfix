@@ -174,7 +174,7 @@ function readCommandLine(pid: number): string {
   return `${result.stdout ?? ''}${result.stderr ?? ''}`.trim();
 }
 
-export function isOurProcess(pid: number, expectedRoot: string): boolean {
+export function isOurProcess(pid: number): boolean {
   try {
     process.kill(pid, 0);
   } catch {
@@ -186,7 +186,8 @@ export function isOurProcess(pid: number, expectedRoot: string): boolean {
     if (!cmdline) {
       return false;
     }
-    return cmdline.includes('watchfix') && cmdline.includes(expectedRoot);
+    // Check for 'watchfix' in command line, or 'index.js' for dev mode
+    return cmdline.includes('watchfix') || cmdline.includes('index.js');
   } catch {
     return false;
   }
