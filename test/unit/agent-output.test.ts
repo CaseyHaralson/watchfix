@@ -64,6 +64,128 @@ confidence: maybe
 
     expect(() => parseAnalysisOutput(yaml)).toThrowError(/confidence/i);
   });
+
+  it('parses code category analysis (default)', () => {
+    const yaml = `summary: Type mismatch in comparison
+root_cause: |
+  Comparing string to number without conversion.
+suggested_fix: |
+  Convert id to number before comparison.
+files_to_modify:
+  - src/handlers/user.ts
+confidence: high
+`;
+
+    const parsed = parseAnalysisOutput(yaml);
+
+    expect(parsed.category).toBe('code');
+    expect(parsed.already_fixed).toBe(false);
+    expect(parsed.files_to_modify).toEqual(['src/handlers/user.ts']);
+  });
+
+  it('parses explicit code category analysis', () => {
+    const yaml = `category: code
+summary: Null pointer exception
+root_cause: Missing null check
+suggested_fix: Add null check
+files_to_modify:
+  - src/app.ts
+confidence: high
+`;
+
+    const parsed = parseAnalysisOutput(yaml);
+
+    expect(parsed.category).toBe('code');
+    expect(parsed.already_fixed).toBe(false);
+  });
+
+  it('parses infrastructure category analysis', () => {
+    const yaml = `category: infrastructure
+summary: Database connection refused
+remediation_guidance: |
+  The PostgreSQL database is not running.
+  Start it with: docker-compose up -d postgres
+confidence: high
+`;
+
+    const parsed = parseAnalysisOutput(yaml);
+
+    expect(parsed.category).toBe('infrastructure');
+    expect(parsed.already_fixed).toBe(false);
+    expect(parsed.summary).toContain('Database connection refused');
+    expect(parsed.remediation_guidance).toContain('docker-compose up');
+    expect(parsed.files_to_modify).toEqual([]);
+  });
+
+  it('parses configuration category analysis', () => {
+    const yaml = `category: configuration
+summary: Missing DATABASE_URL environment variable
+remediation_guidance: |
+  Set the DATABASE_URL environment variable in your .env file:
+  DATABASE_URL=postgres://user:pass@localhost:5432/db
+confidence: high
+`;
+
+    const parsed = parseAnalysisOutput(yaml);
+
+    expect(parsed.category).toBe('configuration');
+    expect(parsed.summary).toContain('DATABASE_URL');
+    expect(parsed.remediation_guidance).toContain('.env file');
+  });
+
+  it('throws when infrastructure category missing remediation_guidance', () => {
+    const yaml = `category: infrastructure
+summary: Redis unavailable
+confidence: high
+`;
+
+    expect(() => parseAnalysisOutput(yaml)).toThrowError(/remediation_guidance/);
+  });
+
+  it('throws when configuration category missing remediation_guidance', () => {
+    const yaml = `category: configuration
+summary: Invalid config value
+confidence: medium
+`;
+
+    expect(() => parseAnalysisOutput(yaml)).toThrowError(/remediation_guidance/);
+  });
+
+  it('throws when category is invalid', () => {
+    const yaml = `category: network
+summary: Some issue
+confidence: low
+`;
+
+    expect(() => parseAnalysisOutput(yaml)).toThrowError(/category/i);
+  });
+
+  it('allows empty files_to_modify for non-code categories', () => {
+    const yaml = `category: infrastructure
+summary: Service unavailable
+remediation_guidance: Restart the service
+confidence: high
+`;
+
+    const parsed = parseAnalysisOutput(yaml);
+
+    expect(parsed.files_to_modify).toEqual([]);
+  });
+
+  it('allows files_to_modify for non-code categories', () => {
+    const yaml = `category: configuration
+summary: Config file has wrong value
+remediation_guidance: |
+  Update the config file directly
+files_to_modify:
+  - config/settings.json
+confidence: medium
+`;
+
+    const parsed = parseAnalysisOutput(yaml);
+
+    expect(parsed.files_to_modify).toEqual(['config/settings.json']);
+  });
 });
 
 describe('parseFixOutput', () => {

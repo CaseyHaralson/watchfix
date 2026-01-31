@@ -30,6 +30,7 @@ const STATUS_ORDER: ErrorStatus[] = [
   'fixed',
   'failed',
   'ignored',
+  'deferred',
 ];
 
 const buildDatabasePath = (rootDir: string): string =>
@@ -98,6 +99,20 @@ const formatActionableErrors = (errors: ErrorRecord[]): string[] => {
   return lines;
 };
 
+const formatDeferredErrors = (errors: ErrorRecord[]): string[] => {
+  if (errors.length === 0) {
+    return ['Deferred errors: none'];
+  }
+
+  const lines = ['Deferred errors (manual action required):'];
+  for (const error of errors) {
+    lines.push(
+      `  #${error.id} ${error.errorType} (${error.source}): ${error.message}`
+    );
+  }
+  return lines;
+};
+
 export const statusCommand = async (options: StatusOptions): Promise<void> => {
   const config = loadConfig(options.config);
   const dbPath = buildDatabasePath(config.project.root);
@@ -108,6 +123,7 @@ export const statusCommand = async (options: StatusOptions): Promise<void> => {
       'Errors:',
       ...STATUS_ORDER.map((status) => `  ${status}: 0`),
       'Actionable errors: none',
+      'Deferred errors: none',
     ];
     process.stdout.write(`${lines.join('\n')}\n`);
     return;
@@ -144,6 +160,9 @@ export const statusCommand = async (options: StatusOptions): Promise<void> => {
 
     const actionable = getErrorsByStatus(db, ['pending', 'suggested']);
     lines.push(...formatActionableErrors(actionable));
+
+    const deferred = getErrorsByStatus(db, ['deferred']);
+    lines.push(...formatDeferredErrors(deferred));
 
     process.stdout.write(`${lines.join('\n')}\n`);
   } finally {

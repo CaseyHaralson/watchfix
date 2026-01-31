@@ -297,6 +297,37 @@ export class WatcherOrchestrator {
         }
       }
 
+      // Handle deferred errors with grace period
+      // Within grace period: deduplicate
+      // After grace period: create new error for re-analysis
+      if (existing && existing.status === 'deferred') {
+        const gracePeriodMs = parseDuration(
+          this.config.deduplication.deferred_grace_period
+        );
+        const deferredAt = new Date(existing.updatedAt).getTime();
+        if (Date.now() - deferredAt < gracePeriodMs) {
+          logActivity(
+            this.db,
+            'error_deduplicated',
+            existing.id,
+            `status=${existing.status} grace_period=true`
+          );
+          this.logger.info(
+            `Deduplicated error ${error.hash} (within grace period after deferral)`
+          );
+          this.emitter.emit('error_deduplicated', {
+            errorId: existing.id,
+            error,
+            status: existing.status,
+          } satisfies WatcherDeduplicatedEvent);
+          return;
+        }
+        // Grace period expired - fall through to create new error for re-analysis
+        this.logger.info(
+          `Deferred error ${error.hash} reappeared after grace period - creating new error for re-analysis`
+        );
+      }
+
       const newId = insertError(this.db, {
         hash: error.hash,
         source: error.source,
@@ -311,14 +342,22 @@ export class WatcherOrchestrator {
         fixResult: null,
       });
 
-      const details =
-        existing ? `recurrence_of=${existing.id}` : undefined;
-      logActivity(this.db, 'error_detected', newId, details);
-      this.logger.info(
-        existing
-          ? `Recurring error detected (${newId}) from ${error.source}`
-          : `New error detected (${newId}) from ${error.source}`
-      );
+      // Log appropriate activity based on previous status
+      if (existing && existing.status === 'deferred') {
+        logActivity(this.db, 'deferred_reanalyzed', newId, `previous_id=${existing.id}`);
+        this.logger.info(
+          `Deferred error re-analyzed (${newId}) from ${error.source}`
+        );
+      } else {
+        const details =
+          existing ? `recurrence_of=${existing.id}` : undefined;
+        logActivity(this.db, 'error_detected', newId, details);
+        this.logger.info(
+          existing
+            ? `Recurring error detected (${newId}) from ${error.source}`
+            : `New error detected (${newId}) from ${error.source}`
+        );
+      }
 
       this.emitter.emit('error_detected', {
         errorId: newId,

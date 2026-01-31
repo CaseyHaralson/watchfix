@@ -122,8 +122,8 @@ describe('context generators', () => {
     vi.setSystemTime(new Date('2026-01-05T00:00:00.000Z'));
 
     const config = buildConfig();
-    // Use 3KB limit - minimum viable since markdown structure is ~2.5KB
-    config.cleanup.context_max_size_kb = 3;
+    // Use 5KB limit - minimum viable since markdown structure is ~4KB with classification section
+    config.cleanup.context_max_size_kb = 5;
 
     const stackLines = Array.from({ length: 800 }, () => '    at call()');
     const stackTrace = stackLines.join('\n');

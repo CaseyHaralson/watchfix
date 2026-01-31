@@ -231,13 +231,38 @@ ${stackTrace}
 ${options.contextBlock}
 ${options.retryContext ? `
 ${buildRetrySection(options.retryContext, options.attempt)}` : ''}
+## Error Classification
+
+First, classify this error into one of three categories:
+
+**code** - Bugs in source code fixable by modifying code files:
+- Logic errors, null pointer exceptions, type mismatches
+- Missing error handling, incorrect API usage
+- Syntax errors, import/export issues
+
+**infrastructure** - Environment/deployment issues NOT fixable by code changes:
+- Database/Redis/queue unavailable or connection refused
+- Network connectivity issues, DNS resolution failures
+- Resource exhaustion (disk full, out of memory)
+- Container/orchestration problems, service not running
+
+**configuration** - Settings or config issues NOT fixable by code changes:
+- Missing or incorrect environment variables
+- Wrong config file values, invalid credentials
+- Permission issues, file/directory access denied
+- SSL/TLS certificate problems
+
 ## Instructions
 
-1. **Check if this issue still exists in the code**
+1. **Classify the error category first**
+   - If infrastructure or configuration: provide remediation_guidance for the user
+   - Only code errors will proceed to the fix phase
+
+2. **Check if this issue still exists in the code** (for code errors)
    - Look at the file(s) mentioned in the stack trace
    - If the code has been fixed, report already_fixed: true
 
-2. **Trace the root cause** (not just the symptom):
+3. **Trace the root cause** (not just the symptom):
    - Ask WHY the error occurs, not just WHERE
    - Common root causes to check:
      - Type mismatches in comparisons (e.g., comparing incompatible types)
@@ -246,7 +271,7 @@ ${buildRetrySection(options.retryContext, options.attempt)}` : ''}
    - Follow the data flow from source to error location
    - The fix should address the underlying cause, not just guard against the symptom
 
-3. **Determine the minimal fix location**:
+4. **Determine the minimal fix location**:
    - Fix at the point where the bug originates, not where it manifests
    - For type issues: convert types at the source
    - For unhandled errors: add error handling at the CALL SITE only
@@ -263,8 +288,10 @@ Write your analysis to: \`${analysisPath}\`
 Use this exact YAML format:
 \`\`\`yaml
 already_fixed: true | false
+category: code | infrastructure | configuration
 summary: One sentence summary of the problem (or that it was already fixed)
-# The following fields are only required if already_fixed is false:
+
+# For code errors (category: code), include these fields:
 root_cause: |
   Detailed explanation of root cause
   Can be multiple lines
@@ -275,6 +302,13 @@ files_to_modify:
   - path/to/file1
   - path/to/file2
 confidence: high | medium | low
+
+# For non-code errors (category: infrastructure or configuration), include:
+remediation_guidance: |
+  Steps the user should take to resolve this issue.
+  Be specific about what to check or change.
+  Example: "Start the PostgreSQL container with: docker-compose up -d postgres"
+confidence: high | medium | low
 \`\`\`
 
 ## Constraints
@@ -283,6 +317,7 @@ confidence: high | medium | low
 - Be specific about file paths relative to project root
 - Set already_fixed to true if the issue no longer exists in the code (e.g., fixed by a previous error fix)
 - WARNING: If a fix fails and is retried, any file modifications from previous attempts will persist
+- For infrastructure/configuration errors, provide actionable remediation_guidance
 `;
 };
 

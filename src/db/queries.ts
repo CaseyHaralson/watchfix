@@ -48,6 +48,8 @@ export type ActivityAction =
   | 'analysis_failed'
   | 'analysis_timeout'
   | 'already_fixed_detected'
+  | 'error_deferred'
+  | 'deferred_reanalyzed'
   | 'fix_start'
   | 'fix_complete'
   | 'fix_failed'

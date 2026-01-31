@@ -111,6 +111,7 @@ const configSchema = z.object({
   deduplication: z
     .object({
       fixed_grace_period: durationSchema.default('10m'),
+      deferred_grace_period: durationSchema.default('1h'),
     })
     .default({}),
   patterns: z
