@@ -273,7 +273,7 @@ const checkDaemonConflict = (db: Database, logger: Logger): boolean => {
     return true;
   }
 
-  if (!isOurProcess(state.pid, state.project_root)) {
+  if (!isOurProcess(state.pid)) {
     clearWatcherState(db);
     return true;
   }

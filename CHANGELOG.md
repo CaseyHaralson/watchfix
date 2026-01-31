@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Error classification during analysis: agents now categorize errors as `code`, `infrastructure`, or `configuration`
+
+### Fixed
+
+- Fixed `watchfix status` incorrectly showing "watcher not running" when the watcher was running
+- Fixed `watchfix show <id>` displaying "fix attempts: 0" for successfully fixed errors
 - New `deferred` status for non-code errors (infrastructure/configuration issues that can't be fixed by code changes)
 - Deferred errors show remediation guidance instead of attempting automatic fixes
 - Configurable grace period for deferred errors (`deduplication.deferred_grace_period`, default 1h) before re-analyzing

@@ -69,7 +69,7 @@ const ensureWatcherAvailable = (
     return true;
   }
 
-  if (isOurProcess(existing.pid, projectRoot)) {
+  if (isOurProcess(existing.pid)) {
     const mode = existing.autonomous ? 'autonomous' : 'manual';
     const message = `Watcher already running (pid ${existing.pid}, ${mode} mode). Use 'watchfix stop'.`;
     if (logger) {
