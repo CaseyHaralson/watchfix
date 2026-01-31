@@ -74,6 +74,58 @@ describe('ErrorParser', () => {
     }
   };
 
+  it('discards generic error when followed by specific error with same message', async () => {
+    vi.useFakeTimers();
+    const parsed: ParsedError[] = [];
+    const parser = new ErrorParser({
+      contextLinesBefore: 0,
+      contextLinesAfter: 0,
+      flushTimeoutMs: 10,
+      onError: (error) => {
+        parsed.push(error);
+      },
+    });
+
+    // Simulate logs where a generic "Error:" is followed by a specific "TypeError:"
+    // with the same core message - only the specific one should be emitted
+    await emitEvents(parser, [
+      'Error: Cannot read property of undefined',
+      'TypeError: Cannot read property of undefined',
+      '    at foo (file.js:1:1)',
+    ]);
+
+    await vi.advanceTimersByTimeAsync(15);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].errorType).toBe('TypeError');
+    expect(parsed[0].message).toBe('TypeError: Cannot read property of undefined');
+    vi.useRealTimers();
+  });
+
+  it('emits both errors when they have different core messages', async () => {
+    vi.useFakeTimers();
+    const parsed: ParsedError[] = [];
+    const parser = new ErrorParser({
+      contextLinesBefore: 0,
+      contextLinesAfter: 0,
+      flushTimeoutMs: 10,
+      onError: (error) => {
+        parsed.push(error);
+      },
+    });
+
+    // Different core messages should result in two separate errors
+    await emitEvents(parser, [
+      'Error: First problem',
+      'TypeError: Different problem',
+    ]);
+
+    await vi.advanceTimersByTimeAsync(15);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].errorType).toBe('Error');
+    expect(parsed[1].errorType).toBe('TypeError');
+    vi.useRealTimers();
+  });
+
   it('groups stack traces and captures context after stack end', async () => {
     const parsed: ParsedError[] = [];
     const parser = new ErrorParser({

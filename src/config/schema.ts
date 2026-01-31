@@ -108,6 +108,11 @@ const configSchema = z.object({
       context_max_size_kb: z.number().int().min(64).default(256),
     })
     .default({}),
+  deduplication: z
+    .object({
+      fixed_grace_period: durationSchema.default('10m'),
+    })
+    .default({}),
   patterns: z
     .object({
       match: z.array(patternSchema).default([]),

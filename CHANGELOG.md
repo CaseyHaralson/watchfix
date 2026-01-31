@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed false "recurring error" detection caused by file watcher re-reading entire log file on mtime changes
+- Added configurable grace period (`deduplication.fixed_grace_period`, default 10m) to prevent re-detection of recently-fixed errors
+
 ## [0.2.1] - 2026-01-30
 
 ### Fixed
