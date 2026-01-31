@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Error classification during analysis: agents now categorize errors as `code`, `infrastructure`, or `configuration`
+- New `deferred` status for non-code errors (infrastructure/configuration issues that can't be fixed by code changes)
+- Deferred errors show remediation guidance instead of attempting automatic fixes
+- Configurable grace period for deferred errors (`deduplication.deferred_grace_period`, default 1h) before re-analyzing
 - Retry context for failed fixes: agents now see what was previously tried and why verification failed
 - 1-indexed attempt display in logs and context files (attempt 1, 2, 3 instead of 0, 1, 2)
 
@@ -16,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Improved agent prompts to focus on root cause analysis rather than symptom-level fixes
 - Agent analysis now explicitly warns against anti-patterns (defensive checks that mask bugs, modifying error-throwing functions)
+- Agent prompts now include classification instructions for categorizing error types
 
 ## [0.2.2] - 2026-01-30
 

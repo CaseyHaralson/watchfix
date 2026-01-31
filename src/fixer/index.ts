@@ -97,9 +97,24 @@ const parseSuggestion = (value: string): AnalysisOutput => {
       suggested_fix: parsed.suggested_fix ?? '',
       files_to_modify: parsed.files_to_modify ?? [],
       confidence: parsed.confidence,
+      category: parsed.category,
+      remediation_guidance: parsed.remediation_guidance,
     };
   }
-  // For regular analyses, ensure all fields are present
+  // For non-code categories, other fields may be empty
+  if (parsed.category && parsed.category !== 'code') {
+    return {
+      already_fixed: false,
+      summary: parsed.summary,
+      root_cause: parsed.root_cause ?? '',
+      suggested_fix: parsed.suggested_fix ?? '',
+      files_to_modify: parsed.files_to_modify ?? [],
+      confidence: parsed.confidence,
+      category: parsed.category,
+      remediation_guidance: parsed.remediation_guidance,
+    };
+  }
+  // For regular code analyses, ensure all fields are present
   if (
     typeof parsed.root_cause !== 'string' ||
     typeof parsed.suggested_fix !== 'string' ||
@@ -114,6 +129,8 @@ const parseSuggestion = (value: string): AnalysisOutput => {
     suggested_fix: parsed.suggested_fix,
     files_to_modify: parsed.files_to_modify,
     confidence: parsed.confidence,
+    category: parsed.category,
+    remediation_guidance: parsed.remediation_guidance,
   };
 };
 
@@ -325,6 +342,53 @@ export class FixOrchestrator {
               attempts,
               analysis: analysisOutput,
               message: 'Issue already fixed',
+            };
+          }
+
+          // Handle non-code errors by transitioning to deferred status
+          const category = analysisOutput.category ?? 'code';
+          if (category !== 'code') {
+            if (
+              !transitionStatus(this.db, errorId, 'analyzing', 'deferred', lockId)
+            ) {
+              throw new UserError(
+                `Failed to transition error ${errorId} into deferred status`
+              );
+            }
+
+            this.db.run(
+              'UPDATE errors SET suggestion = ?, updated_at = ? WHERE id = ?',
+              [
+                JSON.stringify(analysisOutput),
+                new Date().toISOString(),
+                errorId,
+              ]
+            );
+
+            logActivity(
+              this.db,
+              'error_deferred',
+              errorId,
+              JSON.stringify({
+                attempt: attempts,
+                category,
+                summary: analysisOutput.summary,
+              })
+            );
+
+            this.logger.info(
+              `Error ${errorId} deferred (category=${category}): ${analysisOutput.summary}`
+            );
+
+            await releaseLock(this.db, errorId, lockId);
+            lockHeld = false;
+            return {
+              errorId,
+              status: 'deferred',
+              lockAcquired: true,
+              attempts,
+              analysis: analysisOutput,
+              message: `Error deferred (${category})`,
             };
           }
 

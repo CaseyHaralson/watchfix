@@ -20,7 +20,8 @@ export type ErrorStatus =
   | 'fixed'
   | 'failed'
   | 'ignored'
-  | 'resolved';
+  | 'resolved'
+  | 'deferred';
 
 export const EXIT_CODES = {
   SUCCESS: 0,

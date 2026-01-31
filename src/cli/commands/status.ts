@@ -30,6 +30,7 @@ const STATUS_ORDER: ErrorStatus[] = [
   'fixed',
   'failed',
   'ignored',
+  'deferred',
 ];
 
 const buildDatabasePath = (rootDir: string): string =>
@@ -142,7 +143,7 @@ export const statusCommand = async (options: StatusOptions): Promise<void> => {
       lines.push(`  ${status}: ${counts[status]}`);
     }
 
-    const actionable = getErrorsByStatus(db, ['pending', 'suggested']);
+    const actionable = getErrorsByStatus(db, ['pending', 'suggested', 'deferred']);
     lines.push(...formatActionableErrors(actionable));
 
     process.stdout.write(`${lines.join('\n')}\n`);

@@ -4,6 +4,8 @@ import { UserError } from '../utils/errors.js';
 
 type ConfidenceLevel = 'high' | 'medium' | 'low';
 
+type ErrorCategory = 'code' | 'infrastructure' | 'configuration';
+
 type AnalysisOutput = {
   already_fixed: boolean;
   summary: string;
@@ -11,6 +13,8 @@ type AnalysisOutput = {
   suggested_fix: string;
   files_to_modify: string[];
   confidence: ConfidenceLevel;
+  category?: ErrorCategory;
+  remediation_guidance?: string;
 };
 
 type FixOutput = {
@@ -125,6 +129,15 @@ const validateConfidence = (value: unknown): ConfidenceLevel => {
   );
 };
 
+const validateCategory = (value: unknown): ErrorCategory => {
+  if (value === 'code' || value === 'infrastructure' || value === 'configuration') {
+    return value;
+  }
+  throw new UserError(
+    `Invalid category value: ${value ?? 'undefined'} (expected code|infrastructure|configuration)`
+  );
+};
+
 const parseAnalysisOutput = (content: string): AnalysisOutput => {
   const raw = parseYaml(content);
   const data = assertRecord(raw);
@@ -132,6 +145,20 @@ const parseAnalysisOutput = (content: string): AnalysisOutput => {
   const already_fixed = data.already_fixed === true;
   const summary = requireStringField(data, 'summary');
   const confidence = validateConfidence(data.confidence);
+
+  // Parse category, defaulting to 'code' if not specified (backwards compat)
+  const category: ErrorCategory = data.category !== undefined
+    ? validateCategory(data.category)
+    : 'code';
+
+  // Parse remediation_guidance if present
+  let remediation_guidance: string | undefined;
+  if (data.remediation_guidance !== undefined) {
+    if (typeof data.remediation_guidance !== 'string') {
+      throw new UserError('Invalid field: remediation_guidance must be a string');
+    }
+    remediation_guidance = data.remediation_guidance;
+  }
 
   if (already_fixed) {
     return {
@@ -141,9 +168,36 @@ const parseAnalysisOutput = (content: string): AnalysisOutput => {
       suggested_fix: '',
       files_to_modify: [],
       confidence,
+      category,
+      remediation_guidance,
     };
   }
 
+  // For non-code categories, require remediation_guidance but allow empty files_to_modify
+  if (category !== 'code') {
+    if (!remediation_guidance || remediation_guidance.trim() === '') {
+      throw new UserError(
+        `Missing required field: remediation_guidance (required for ${category} errors)`
+      );
+    }
+    // files_to_modify can be empty for non-code errors
+    const files_to_modify = data.files_to_modify !== undefined
+      ? requireStringArrayField(data, 'files_to_modify')
+      : [];
+
+    return {
+      already_fixed: false,
+      summary,
+      root_cause: typeof data.root_cause === 'string' ? data.root_cause : '',
+      suggested_fix: typeof data.suggested_fix === 'string' ? data.suggested_fix : '',
+      files_to_modify,
+      confidence,
+      category,
+      remediation_guidance,
+    };
+  }
+
+  // For code category, require root_cause, suggested_fix, files_to_modify
   const root_cause = requireStringField(data, 'root_cause');
   const suggested_fix = requireStringField(data, 'suggested_fix');
   const files_to_modify = requireStringArrayField(data, 'files_to_modify');
@@ -155,6 +209,8 @@ const parseAnalysisOutput = (content: string): AnalysisOutput => {
     suggested_fix,
     files_to_modify,
     confidence,
+    category,
+    remediation_guidance,
   };
 };
 
@@ -186,5 +242,5 @@ const parseFixOutput = (content: string): FixOutput => {
   };
 };
 
-export type { AnalysisOutput, FixOutput, ConfidenceLevel, StoredFixResult };
+export type { AnalysisOutput, FixOutput, ConfidenceLevel, ErrorCategory, StoredFixResult };
 export { parseAnalysisOutput, parseFixOutput };

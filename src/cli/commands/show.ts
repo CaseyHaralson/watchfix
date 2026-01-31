@@ -28,6 +28,8 @@ type AnalysisResult = {
   suggested_fix?: string;
   files_to_modify?: string[];
   confidence?: string;
+  category?: string;
+  remediation_guidance?: string;
 };
 
 type FixResult = {
@@ -99,6 +101,9 @@ const formatAnalysis = (analysis: AnalysisResult | string | null): string[] => {
   }
 
   const lines = ['Analysis:'];
+  if (analysis.category) {
+    lines.push(`  Category: ${analysis.category}`);
+  }
   if (analysis.summary) {
     lines.push(`  Summary: ${analysis.summary}`);
   }
@@ -117,6 +122,12 @@ const formatAnalysis = (analysis: AnalysisResult | string | null): string[] => {
     for (const file of analysis.files_to_modify) {
       lines.push(`    - ${file}`);
     }
+  }
+  if (analysis.remediation_guidance) {
+    lines.push('  Remediation guidance:');
+    lines.push(
+      ...analysis.remediation_guidance.split('\n').map((line) => `    ${line}`)
+    );
   }
   if (analysis.confidence) {
     lines.push(`  Confidence: ${analysis.confidence}`);
