@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { Database } from '../../src/db/index.js';
 import { initializeSchema } from '../../src/db/schema.js';
@@ -69,6 +69,12 @@ afterEach(async () => {
     await removeTempDir(state.dir);
     state = null;
   }
+});
+
+// Allow time for chokidar file watchers to fully clean up
+// before subsequent test files that spawn child processes
+afterAll(async () => {
+  await delay(2000);
 });
 
 describe('WatcherOrchestrator deduplication', () => {
