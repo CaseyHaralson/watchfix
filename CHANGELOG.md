@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Retry context for failed fixes: agents now see what was previously tried and why verification failed
+- 1-indexed attempt display in logs and context files (attempt 1, 2, 3 instead of 0, 1, 2)
+
+### Changed
+
+- Improved agent prompts to focus on root cause analysis rather than symptom-level fixes
+- Agent analysis now explicitly warns against anti-patterns (defensive checks that mask bugs, modifying error-throwing functions)
+
 ## [0.2.2] - 2026-01-30
 
 ### Fixed

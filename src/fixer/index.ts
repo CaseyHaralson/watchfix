@@ -6,13 +6,13 @@ import type { Agent, AgentResult } from '../agents/types.js';
 import { createAgent } from '../agents/index.js';
 import type { Config } from '../config/schema.js';
 import type { Database } from '../db/index.js';
-import { getError, logActivity } from '../db/queries.js';
+import { getError, logActivity, type ErrorRecord } from '../db/queries.js';
 import type { ErrorStatus } from '../utils/errors.js';
 import { UserError } from '../utils/errors.js';
 import { parseDuration } from '../utils/duration.js';
 import { Logger } from '../utils/logger.js';
 import { generateAnalyzeContext, generateFixContext } from './context.js';
-import type { AnalysisOutput, FixOutput } from './output.js';
+import type { AnalysisOutput, FixOutput, StoredFixResult } from './output.js';
 import { parseAnalysisOutput, parseFixOutput } from './output.js';
 import { runVerification, type VerificationResult } from './verifier.js';
 import { acquireLock, generateLockId, releaseLock, transitionStatus } from './lock.js';
@@ -115,6 +115,45 @@ const parseSuggestion = (value: string): AnalysisOutput => {
     files_to_modify: parsed.files_to_modify,
     confidence: parsed.confidence,
   };
+};
+
+export type RetryContext = {
+  previousAttempt: {
+    analysis?: { summary: string; suggested_fix: string; files_to_modify: string[] };
+    fix?: { success: boolean; summary: string; files_changed?: Array<{ path: string; change: string }> };
+    verification_failure?: { type: string; command?: string; message?: string; stderr?: string };
+  };
+};
+
+const buildRetryContext = (error: ErrorRecord): RetryContext | undefined => {
+  if (error.fixAttempts === 0) return undefined;
+
+  const previousAttempt: RetryContext['previousAttempt'] = {};
+
+  // Extract analysis from suggestion
+  if (error.suggestion) {
+    try {
+      const parsed = JSON.parse(error.suggestion) as AnalysisOutput & { error?: boolean };
+      if (!parsed.error && parsed.summary) {
+        previousAttempt.analysis = {
+          summary: parsed.summary,
+          suggested_fix: parsed.suggested_fix || '',
+          files_to_modify: parsed.files_to_modify || [],
+        };
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Extract fix result and verification failure
+  if (error.fixResult) {
+    try {
+      const parsed = JSON.parse(error.fixResult) as StoredFixResult;
+      if (parsed.fix) previousAttempt.fix = parsed.fix;
+      if (parsed.verification_failure) previousAttempt.verification_failure = parsed.verification_failure;
+    } catch { /* ignore */ }
+  }
+
+  return Object.keys(previousAttempt).length > 0 ? { previousAttempt } : undefined;
 };
 
 export class FixOrchestrator {
@@ -231,8 +270,9 @@ export class FixOrchestrator {
           JSON.stringify({ attempt: attempts, lockId })
         );
 
-        this.logger.info(`Analyzing error ${errorId} (attempt ${attempts})...`);
-        const context = generateAnalyzeContext(error, this.config, attempts);
+        this.logger.info(`Analyzing error ${errorId} (attempt ${attempts + 1})...`);
+        const retryContext = buildRetryContext(error);
+        const context = generateAnalyzeContext(error, this.config, attempts, retryContext);
         const contextPath = path.resolve(this.config.project.root, context.path);
         await fs.mkdir(path.dirname(contextPath), { recursive: true });
         await fs.writeFile(contextPath, context.content, 'utf8');
@@ -428,7 +468,7 @@ export class FixOrchestrator {
         JSON.stringify({ attempt: attempts, lockId })
       );
 
-      this.logger.info(`Applying fix for error ${errorId} (attempt ${attempts})...`);
+      this.logger.info(`Applying fix for error ${errorId} (attempt ${attempts + 1})...`);
       const analysisYaml = analysisToYaml(analysisOutput);
       const fixContext = generateFixContext(
         error,
@@ -604,9 +644,21 @@ export class FixOrchestrator {
           `Failed to transition error ${errorId} after verification failure`
         );
       }
+
+      const failureRecord = {
+        fix: fixOutput,
+        verification_failure: verificationResult.failure ? {
+          type: verificationResult.failure.type,
+          command: verificationResult.failure.type === 'command'
+            ? verificationResult.failure.command : undefined,
+          message: verificationResult.failure.message,
+          stderr: verificationResult.failure.type === 'command'
+            ? verificationResult.failure.stderr?.slice(0, 4096) : undefined,
+        } : undefined,
+      };
       this.db.run(
-        'UPDATE errors SET fix_attempts = ?, updated_at = ? WHERE id = ?',
-        [newAttempts, new Date().toISOString(), errorId]
+        'UPDATE errors SET fix_result = ?, fix_attempts = ?, updated_at = ? WHERE id = ?',
+        [JSON.stringify(failureRecord), newAttempts, new Date().toISOString(), errorId]
       );
 
       logActivity(

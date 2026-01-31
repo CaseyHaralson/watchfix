@@ -3,6 +3,14 @@ import path from 'node:path';
 import type { Config } from '../config/schema.js';
 import type { ErrorRecord } from '../db/queries.js';
 
+type RetryContext = {
+  previousAttempt: {
+    analysis?: { summary: string; suggested_fix: string; files_to_modify: string[] };
+    fix?: { success: boolean; summary: string; files_changed?: Array<{ path: string; change: string }> };
+    verification_failure?: { type: string; command?: string; message?: string; stderr?: string };
+  };
+};
+
 type GeneratedContext = {
   path: string;
   content: string;
@@ -133,6 +141,54 @@ const truncateStackTraceToBytes = (
   return head ? `${head}\n${STACK_TRACE_TRUNCATION_MARKER}` : STACK_TRACE_TRUNCATION_MARKER;
 };
 
+const buildRetrySection = (retryContext: RetryContext, attempt: number): string => {
+  const { previousAttempt } = retryContext;
+  const lines: string[] = [
+    `## IMPORTANT: This is a RETRY (Attempt ${attempt + 1})`,
+    '',
+    'The previous fix attempt was applied but **verification failed**.',
+    '',
+    '### What was tried:',
+  ];
+
+  if (previousAttempt.analysis) {
+    lines.push(`- Analysis: ${previousAttempt.analysis.summary}`);
+    if (previousAttempt.analysis.files_to_modify.length > 0) {
+      lines.push(`- Files modified: ${previousAttempt.analysis.files_to_modify.join(', ')}`);
+    }
+  }
+  if (previousAttempt.fix) {
+    lines.push(`- Fix applied: ${previousAttempt.fix.summary}`);
+  }
+
+  lines.push('');
+  lines.push('### Why it failed:');
+
+  if (previousAttempt.verification_failure) {
+    const vf = previousAttempt.verification_failure;
+    lines.push(`**Verification command failed**: ${vf.command || 'unknown'}`);
+    lines.push(`**Message**: ${vf.message || 'unknown'}`);
+    if (vf.stderr) {
+      lines.push('**Test output**:');
+      lines.push('```');
+      lines.push(vf.stderr.slice(0, 2000));
+      lines.push('```');
+    }
+  } else {
+    lines.push('Verification failed (details not available)');
+  }
+
+  lines.push('');
+  lines.push('### Instructions for retry:');
+  lines.push('1. The code has ALREADY been modified by the previous attempt');
+  lines.push('2. Do NOT report already_fixed unless the verification test is actually passing');
+  lines.push('3. Focus on the verification failure output - it shows what\'s still broken');
+  lines.push('4. The original error message may not appear in code anymore, but the test is still failing');
+  lines.push('');
+
+  return lines.join('\n');
+};
+
 const buildAnalyzeContent = (options: {
   projectName: string;
   projectRoot: string;
@@ -141,11 +197,12 @@ const buildAnalyzeContent = (options: {
   date: string;
   stackTrace: string;
   contextBlock: string;
+  retryContext?: RetryContext;
 }): string => {
   const { projectName, projectRoot, error, attempt, date, stackTrace } = options;
   const analysisPath = path.posix.join(
     CONTEXT_DIR,
-    `${date}-error-${error.id}-attempt-${attempt}-analysis.yaml`
+    `${date}-error-${error.id}-attempt-${attempt + 1}-analysis.yaml`
   );
 
   return `# WatchFix Task
@@ -162,7 +219,7 @@ analyze
 - Source: ${error.source}
 - Type: ${error.errorType}
 - Detected: ${error.timestamp}
-- Fix Attempts: ${error.fixAttempts}
+- Fix Attempts: ${error.fixAttempts + 1}
 
 ### Message
 ${error.message}
@@ -172,19 +229,34 @@ ${stackTrace}
 
 ### Context (surrounding log lines)
 ${options.contextBlock}
-
+${options.retryContext ? `
+${buildRetrySection(options.retryContext, options.attempt)}` : ''}
 ## Instructions
 
-1. **First, check if this issue still exists in the code**
+1. **Check if this issue still exists in the code**
    - Look at the file(s) mentioned in the stack trace
-   - Determine if the error condition is still present
-   - If the code has been modified and the issue is gone, report it as already_fixed
+   - If the code has been fixed, report already_fixed: true
 
-2. If the issue still exists:
-   - Investigate the project structure to understand the codebase
-   - Identify the root cause of this error
-   - Determine what files need to be modified
-   - Assess your confidence in the fix
+2. **Trace the root cause** (not just the symptom):
+   - Ask WHY the error occurs, not just WHERE
+   - Common root causes to check:
+     - Type mismatches in comparisons (e.g., comparing incompatible types)
+     - Failed lookups due to incorrect comparison logic
+     - Missing type conversions on input values
+   - Follow the data flow from source to error location
+   - The fix should address the underlying cause, not just guard against the symptom
+
+3. **Determine the minimal fix location**:
+   - Fix at the point where the bug originates, not where it manifests
+   - For type issues: convert types at the source
+   - For unhandled errors: add error handling at the CALL SITE only
+   - Do NOT modify functions that throw errors - handle errors where they are called
+
+## Anti-patterns to Avoid
+- Adding null/undefined checks that mask the real bug (e.g., the check passes but the lookup logic is still wrong)
+- Modifying error-throwing functions instead of handling at call sites
+- Adding environment variables, feature flags, or extra parameters
+- Refactoring or improving code beyond the specific fix
 
 Write your analysis to: \`${analysisPath}\`
 
@@ -227,7 +299,7 @@ const buildFixContent = (options: {
     options;
   const resultPath = path.posix.join(
     CONTEXT_DIR,
-    `${date}-error-${error.id}-attempt-${attempt}-result.yaml`
+    `${date}-error-${error.id}-attempt-${attempt + 1}-result.yaml`
   );
 
   return `# WatchFix Task
@@ -244,7 +316,7 @@ fix
 - Source: ${error.source}
 - Type: ${error.errorType}
 - Detected: ${error.timestamp}
-- Fix Attempts: ${error.fixAttempts}
+- Fix Attempts: ${error.fixAttempts + 1}
 
 ### Message
 ${error.message}
@@ -277,8 +349,13 @@ notes: |
 \`\`\`
 
 ## Constraints
-- Make the smallest change that resolves the issue
-- Do NOT change unrelated code
+- Make the SMALLEST change that fixes the ROOT CAUSE
+- Fix the bug where it originates, not where symptoms appear
+- Do NOT add defensive checks that mask the real bug
+- Do NOT modify functions that throw errors - add handling at call sites
+- Do NOT add environment variables, feature flags, or new parameters
+- Do NOT refactor, improve, or clean up code beyond the fix
+- If touching more than 1-2 files or 10 lines, reconsider your approach
 - If the fix cannot be applied, set success to false and explain in notes
 - WARNING: If this fix fails verification, the modified files will remain changed for the next retry attempt
 `;
@@ -353,12 +430,13 @@ const ensureSizeLimit = (options: {
 export const generateAnalyzeContext = (
   error: ErrorRecord,
   config: Config,
-  attempt: number
+  attempt: number,
+  retryContext?: RetryContext
 ): GeneratedContext => {
   const date = formatDate();
   const contextPath = path.posix.join(
     CONTEXT_DIR,
-    `${date}-error-${error.id}-attempt-${attempt}-analyze.md`
+    `${date}-error-${error.id}-attempt-${attempt + 1}-analyze.md`
   );
   const maxBytes = config.cleanup.context_max_size_kb * 1024;
   const { before, after } = splitRawLog(error);
@@ -386,6 +464,7 @@ export const generateAnalyzeContext = (
         afterLines,
         truncated
       ),
+      retryContext,
     });
   };
 
@@ -481,7 +560,7 @@ export const generateFixContext = (
   const date = formatDate();
   const contextPath = path.posix.join(
     CONTEXT_DIR,
-    `${date}-error-${error.id}-attempt-${attempt}-fix.md`
+    `${date}-error-${error.id}-attempt-${attempt + 1}-fix.md`
   );
   const maxBytes = config.cleanup.context_max_size_kb * 1024;
   const stackTrace = truncateStackTrace(error.stackTrace ?? '');

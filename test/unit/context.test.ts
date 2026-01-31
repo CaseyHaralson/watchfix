@@ -43,12 +43,13 @@ describe('context generators', () => {
     const config = buildConfig();
     const result = generateAnalyzeContext(baseError, config, 2);
 
+    // attempt=2 (0-indexed) becomes attempt-3 in display (1-indexed)
     expect(result.path).toBe(
-      '.watchfix/context/2026-01-02-error-5-attempt-2-analyze.md'
+      '.watchfix/context/2026-01-02-error-5-attempt-3-analyze.md'
     );
     expect(result.content).toContain('## Mode\nanalyze');
     expect(result.content).toContain(
-      'Write your analysis to: `.watchfix/context/2026-01-02-error-5-attempt-2-analysis.yaml`'
+      'Write your analysis to: `.watchfix/context/2026-01-02-error-5-attempt-3-analysis.yaml`'
     );
     expect(result.content).toContain('### Context (surrounding log lines)');
     expect(result.content).toContain('---ERROR---');
@@ -66,14 +67,15 @@ describe('context generators', () => {
     const analysis = 'summary: test summary';
     const result = generateFixContext(baseError, analysis, config, 3);
 
+    // attempt=3 (0-indexed) becomes attempt-4 in display (1-indexed)
     expect(result.path).toBe(
-      '.watchfix/context/2026-01-03-error-5-attempt-3-fix.md'
+      '.watchfix/context/2026-01-03-error-5-attempt-4-fix.md'
     );
     expect(result.content).toContain('## Mode\nfix');
     expect(result.content).toContain('## Previous Analysis');
     expect(result.content).toContain(analysis);
     expect(result.content).toContain(
-      'Write your results to: `.watchfix/context/2026-01-03-error-5-attempt-3-result.yaml`'
+      'Write your results to: `.watchfix/context/2026-01-03-error-5-attempt-4-result.yaml`'
     );
 
     vi.useRealTimers();
@@ -120,8 +122,8 @@ describe('context generators', () => {
     vi.setSystemTime(new Date('2026-01-05T00:00:00.000Z'));
 
     const config = buildConfig();
-    // Use 2KB limit - minimum viable since markdown structure is ~1.2KB
-    config.cleanup.context_max_size_kb = 2;
+    // Use 3KB limit - minimum viable since markdown structure is ~2.5KB
+    config.cleanup.context_max_size_kb = 3;
 
     const stackLines = Array.from({ length: 800 }, () => '    at call()');
     const stackTrace = stackLines.join('\n');

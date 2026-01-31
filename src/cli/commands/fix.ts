@@ -205,7 +205,7 @@ const formatStatusLine = (result: FixResult, maxAttempts: number): string => {
   }
   const retryInfo =
     result.attempts < maxAttempts ? ', will retry' : ', max attempts reached';
-  return `Status: ${result.status} (attempt ${result.attempts} of ${maxAttempts}${retryInfo})`;
+  return `Status: ${result.status} (attempt ${result.attempts + 1} of ${maxAttempts}${retryInfo})`;
 };
 
 const formatFixOutcome = (
