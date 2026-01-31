@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import type { Config } from '../config/schema.js';
 import type { Database } from '../db/index.js';
 import { getErrorByHash, insertError, logActivity } from '../db/queries.js';
+import { parseDuration } from '../utils/duration.js';
 import type { ErrorStatus } from '../utils/errors.js';
 import { Logger } from '../utils/logger.js';
 import { ErrorParser, type ParsedError } from './parser.js';
@@ -268,6 +269,32 @@ export class WatcherOrchestrator {
           status: existing.status,
         } satisfies WatcherDeduplicatedEvent);
         return;
+      }
+
+      // Deduplicate fixed errors within grace period to prevent re-detection
+      // after a fix when the log file is re-read
+      if (existing && existing.status === 'fixed') {
+        const gracePeriodMs = parseDuration(
+          this.config.deduplication.fixed_grace_period
+        );
+        const fixedAt = new Date(existing.updatedAt).getTime();
+        if (Date.now() - fixedAt < gracePeriodMs) {
+          logActivity(
+            this.db,
+            'error_deduplicated',
+            existing.id,
+            `status=${existing.status} grace_period=true`
+          );
+          this.logger.info(
+            `Deduplicated error ${error.hash} (within grace period after fix)`
+          );
+          this.emitter.emit('error_deduplicated', {
+            errorId: existing.id,
+            error,
+            status: existing.status,
+          } satisfies WatcherDeduplicatedEvent);
+          return;
+        }
       }
 
       const newId = insertError(this.db, {

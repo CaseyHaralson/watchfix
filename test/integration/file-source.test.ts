@@ -49,6 +49,52 @@ const createLogger = (): TestLogger => ({
 });
 
 describe('FileSource', () => {
+  it('does not re-read file on mtime change without new content', async () => {
+    const tempDir = createTempDir();
+    const filePath = path.join(tempDir, 'app.log');
+    fs.writeFileSync(filePath, 'initial line\n', 'utf8');
+
+    // Set mtime to more than 1 second ago so the file isn't considered "recent"
+    // and the watcher starts at the end of the file
+    const oldTime = new Date(Date.now() - 2000);
+    fs.utimesSync(filePath, oldTime, oldTime);
+
+    const source = new FileSource({
+      name: 'app',
+      type: 'file',
+      path: filePath,
+    });
+
+    const receivedLines: string[] = [];
+    source.on('line', (event) => {
+      receivedLines.push(event.line);
+    });
+
+    try {
+      await source.start();
+      await delay(100);
+
+      // Touch the file to change mtime without adding content
+      const now = new Date();
+      fs.utimesSync(filePath, now, now);
+      await delay(300);
+
+      // Should not have re-read the file (no position reset on mtime change alone)
+      expect(receivedLines).toEqual([]);
+
+      // Now append actual new content
+      const linesPromise = waitForLines(source, 1);
+      fs.appendFileSync(filePath, 'new line\n', 'utf8');
+
+      const lines = await linesPromise;
+      expect(lines).toEqual(['new line']);
+      expect(receivedLines).toEqual(['new line']);
+    } finally {
+      await source.stop();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('detects appended lines', async () => {
     const tempDir = createTempDir();
     const filePath = path.join(tempDir, 'app.log');
@@ -95,7 +141,9 @@ describe('FileSource', () => {
       await firstLines;
 
       fs.writeFileSync(filePath, '', 'utf8');
-      await delay(50);
+      // Wait long enough for the watcher to see the truncated state (size 0)
+      // so it can reset position before new content is added
+      await delay(300);
 
       const secondLines = waitForLines(source, 1);
       fs.appendFileSync(filePath, 'two\n', 'utf8');

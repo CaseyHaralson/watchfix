@@ -148,18 +148,14 @@ export class FileSource implements LogSource {
 
     const inode = typeof stats.ino === 'number' ? stats.ino : null;
     const mtimeMs = stats.mtimeMs;
-    const shouldForceRead = this.forceRead;
     this.forceRead = false;
     const inodeChanged =
       this.lastInode !== null && inode !== null && inode !== this.lastInode;
-    const mtimeChanged = this.lastMtimeMs !== null && mtimeMs !== this.lastMtimeMs;
 
-    if (
-      inodeChanged ||
-      stats.size < this.position ||
-      (shouldForceRead && stats.size === this.position && this.position > 0) ||
-      (mtimeChanged && stats.size === this.position && this.position > 0)
-    ) {
+    // Only reset position on actual file replacement (inode change) or truncation (size shrunk)
+    // Do NOT reset on mtime changes without content changes - this prevents re-reading
+    // old errors when the file is touched but no new content is added
+    if (inodeChanged || stats.size < this.position) {
       this.position = 0;
       this.partialLine = '';
     }
