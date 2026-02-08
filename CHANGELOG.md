@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-02-08
+
 ### Added
 
 - NDJSON (Newline Delimited JSON) log file support: file sources can now parse structured JSON logs with `format: ndjson` option
