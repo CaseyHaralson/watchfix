@@ -3,7 +3,8 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import chokidar, { type FSWatcher } from 'chokidar';
 import { Logger } from '../../utils/logger.js';
-import type { FileSourceConfig, LogEvent, LogSource } from './types.js';
+import type { FileSourceConfig, LogEvent, LogSource, NdjsonConfig } from './types.js';
+import { parseNdjsonLine } from './ndjson.js';
 
 type LoggerLike = Pick<Logger, 'warn' | 'info' | 'debug' | 'error'>;
 
@@ -16,6 +17,8 @@ export class FileSource implements LogSource {
   private readonly filePath: string;
   private readonly logger: LoggerLike;
   private readonly emitter: EventEmitter;
+  private readonly format: 'text' | 'ndjson';
+  private readonly ndjsonConfig: NdjsonConfig | null;
   private watcher: FSWatcher | null = null;
   private position = 0;
   private partialLine = '';
@@ -32,6 +35,8 @@ export class FileSource implements LogSource {
     this.logger =
       options?.logger ?? new Logger({ terminalEnabled: false, verbosity: 'normal' });
     this.emitter = new EventEmitter();
+    this.format = config.format ?? 'text';
+    this.ndjsonConfig = config.ndjson ?? null;
   }
 
   async start(): Promise<void> {
@@ -197,12 +202,48 @@ export class FileSource implements LogSource {
     this.partialLine = lines.pop() ?? '';
 
     for (const rawLine of lines) {
-      const line = rawLine.replace(/\r$/, '');
+      this.handleLine(rawLine.replace(/\r$/, ''));
+    }
+  }
+
+  private handleLine(line: string): void {
+    if (this.format !== 'ndjson' || !this.ndjsonConfig) {
       this.emitter.emit('line', {
         source: this.config.name,
         line,
         timestamp: new Date(),
       } as LogEvent);
+      return;
     }
+
+    const result = parseNdjsonLine(line, this.ndjsonConfig);
+
+    if (result.success) {
+      this.emitter.emit('line', {
+        source: this.config.name,
+        line: result.data.message,
+        timestamp: result.data.timestamp,
+      } as LogEvent);
+      return;
+    }
+
+    // Handle different failure reasons
+    if (result.reason === 'filtered') {
+      // Line was filtered by level - silently skip
+      return;
+    }
+
+    if (result.reason === 'missing_message') {
+      this.logger.debug(
+        `NDJSON line missing message field "${this.ndjsonConfig.messageField}": ${line.slice(0, 100)}`
+      );
+    }
+
+    // For parse errors or missing message, fall back to emitting raw line
+    this.emitter.emit('line', {
+      source: this.config.name,
+      line,
+      timestamp: new Date(),
+    } as LogEvent);
   }
 }

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- NDJSON (Newline Delimited JSON) log file support: file sources can now parse structured JSON logs with `format: ndjson` option
+- Configurable field extraction for NDJSON logs: `messageField`, `timestampField`, `levelField`
+- Level filtering for NDJSON logs: only process lines matching specified log levels
+- Support for nested fields in NDJSON config using dot notation (e.g., `log.message`)
+- Support for Bunyan numeric log levels (10=trace, 20=debug, 30=info, 40=warn, 50=error, 60=fatal)
+
 ## [0.3.0] - 2026-01-31
 
 ### Added
