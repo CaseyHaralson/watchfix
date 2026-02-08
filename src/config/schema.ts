@@ -23,10 +23,19 @@ const durationSchema = z
     return amount * msByUnit[unit] <= MAX_DURATION_MS;
   }, 'Duration cannot exceed 24 hours');
 
+const ndjsonConfigSchema = z.object({
+  messageField: z.string().min(1),
+  timestampField: z.string().min(1).optional(),
+  levelField: z.string().min(1).optional(),
+  levelFilter: z.array(z.string().min(1)).optional(),
+});
+
 const fileSourceSchema = z.object({
   name: z.string().min(1),
   type: z.literal('file'),
   path: z.string().min(1),
+  format: z.enum(['text', 'ndjson']).optional(),
+  ndjson: ndjsonConfigSchema.optional(),
 });
 
 const dockerSourceSchema = z.object({
@@ -73,6 +82,17 @@ const configSchema = z.object({
           return names.length === new Set(names).size;
         },
         { message: 'Log source names must be unique' }
+      )
+      .refine(
+        (sources) => {
+          return sources.every((source) => {
+            if (source.type === 'file' && source.format === 'ndjson') {
+              return source.ndjson !== undefined;
+            }
+            return true;
+          });
+        },
+        { message: 'ndjson config is required when format is "ndjson"' }
       ),
     context_lines_before: z.number().int().min(0).default(10),
     context_lines_after: z.number().int().min(0).default(5),
@@ -131,6 +151,7 @@ export {
   durationSchema,
   fileSourceSchema,
   logSourceSchema,
+  ndjsonConfigSchema,
   patternSchema,
 };
 export type { Config };

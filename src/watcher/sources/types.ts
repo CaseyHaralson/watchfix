@@ -4,10 +4,19 @@ export type LogEvent = {
   timestamp: Date;
 };
 
+export type NdjsonConfig = {
+  messageField: string;
+  timestampField?: string;
+  levelField?: string;
+  levelFilter?: string[];
+};
+
 export type FileSourceConfig = {
   name: string;
   type: 'file';
   path: string;
+  format?: 'text' | 'ndjson';
+  ndjson?: NdjsonConfig;
 };
 
 export type DockerSourceConfig = {

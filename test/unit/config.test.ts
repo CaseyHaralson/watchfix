@@ -87,4 +87,56 @@ describe('configSchema', () => {
       );
     }
   });
+
+  it('accepts file source with ndjson format and config', () => {
+    const result = configSchema.safeParse({
+      ...minimalConfig,
+      logs: {
+        sources: [
+          {
+            name: 'app',
+            type: 'file',
+            path: './logs/app.log',
+            format: 'ndjson',
+            ndjson: {
+              messageField: 'msg',
+              timestampField: 'time',
+              levelField: 'level',
+              levelFilter: ['error', 'fatal'],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects ndjson format without ndjson config', () => {
+    const result = configSchema.safeParse({
+      ...minimalConfig,
+      logs: {
+        sources: [
+          {
+            name: 'app',
+            type: 'file',
+            path: './logs/app.log',
+            format: 'ndjson',
+          },
+        ],
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe(
+        'ndjson config is required when format is "ndjson"'
+      );
+    }
+  });
+
+  it('accepts file source without format (defaults to text)', () => {
+    const result = configSchema.safeParse(minimalConfig);
+    expect(result.success).toBe(true);
+  });
 });
