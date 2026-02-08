@@ -37,6 +37,18 @@ logs:
       type: file                  # file | docker | command
       path: ./logs/backend.log    # For type: file
 
+    - name: app-json              # NDJSON (structured JSON logs)
+      type: file
+      path: ./logs/app.ndjson
+      format: ndjson              # Parse each line as JSON
+      ndjson:
+        messageField: msg         # Required: field containing log message
+        timestampField: time      # Optional: field containing timestamp
+        levelField: level         # Optional: field containing log level
+        levelFilter:              # Optional: only process these levels
+          - error
+          - fatal
+
     - name: api
       type: docker
       container: my-app-api       # For type: docker
@@ -104,10 +116,19 @@ const durationSchema = z.string()
     return ms <= 24 * 60 * 60 * 1000; // Max 24 hours
   }, 'Duration cannot exceed 24 hours');
 
+const ndjsonConfigSchema = z.object({
+  messageField: z.string().min(1),
+  timestampField: z.string().min(1).optional(),
+  levelField: z.string().min(1).optional(),
+  levelFilter: z.array(z.string().min(1)).optional(),
+});
+
 const fileSourceSchema = z.object({
   name: z.string().min(1),
   type: z.literal('file'),
   path: z.string().min(1),
+  format: z.enum(['text', 'ndjson']).optional(),
+  ndjson: ndjsonConfigSchema.optional(),
 });
 
 const dockerSourceSchema = z.object({
@@ -198,9 +219,66 @@ Configuration is validated using Zod on load. Validation includes:
 - Required fields present
 - Log source configs match their type
 - `interval` required for `command` type sources
+- `ndjson` config required when `format` is `ndjson`
 - Agent provider is one of: `claude`, `gemini`, `codex`
 - Duration strings are parseable
 - Numeric values are positive integers where required
 - Paths are accessible (warning if not, will wait for creation)
 - Validate `project.root` resolves to an existing directory (error if not found)
 - Log source names are unique within the config
+
+## NDJSON Format
+
+NDJSON (Newline Delimited JSON) format allows parsing structured JSON logs where each line is a valid JSON object. This is commonly used by logging libraries like Pino, Bunyan, Winston, and ECS.
+
+### Configuration
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `messageField` | Yes | Field containing the log message (e.g., `msg`, `message`) |
+| `timestampField` | No | Field containing timestamp (ISO 8601 string or Unix timestamp) |
+| `levelField` | No | Field containing log level (e.g., `level`, `log.level`) |
+| `levelFilter` | No | Array of levels to process; other levels are skipped |
+
+### Nested Fields
+
+Use dot notation to access nested fields:
+
+```yaml
+ndjson:
+  messageField: log.message      # Accesses { log: { message: "..." } }
+  levelField: log.level          # Accesses { log: { level: "error" } }
+  timestampField: "@timestamp"   # ECS format
+```
+
+### Supported Formats
+
+| Format | messageField | timestampField | levelField |
+|--------|--------------|----------------|------------|
+| Pino | `msg` | `time` | `level` |
+| Bunyan | `msg` | `time` | `level` |
+| Winston | `message` | `timestamp` | `level` |
+| ECS | `message` | `@timestamp` | `log.level` |
+
+### Level Filtering
+
+When `levelFilter` is configured, only lines with matching levels are processed:
+
+```yaml
+ndjson:
+  messageField: msg
+  levelField: level
+  levelFilter:
+    - error
+    - fatal
+```
+
+- Level matching is case-insensitive (`ERROR` matches `error`)
+- Bunyan numeric levels are supported (50 = error, 60 = fatal)
+- Lines without a level field are skipped when filter is configured
+
+### Error Handling
+
+- **Invalid JSON**: Line is emitted as-is (pattern matching still works)
+- **Missing message field**: Line is emitted as-is with a debug warning
+- **Filtered level**: Line is silently skipped

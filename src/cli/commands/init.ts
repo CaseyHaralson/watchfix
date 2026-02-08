@@ -35,6 +35,19 @@ logs:
       type: file
       path: ./logs/app.log
 
+  # Example NDJSON source (for structured JSON logs like Pino, Bunyan, Winston):
+  # - name: app-json
+  #   type: file
+  #   path: ./logs/app.ndjson
+  #   format: ndjson
+  #   ndjson:
+  #     messageField: msg           # Required: field containing log message
+  #     timestampField: time        # Optional: field with timestamp
+  #     levelField: level           # Optional: field with log level
+  #     levelFilter:                # Optional: only process these levels
+  #       - error
+  #       - fatal
+
   # Example docker source:
   # - name: api
   #   type: docker
