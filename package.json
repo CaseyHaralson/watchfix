@@ -30,6 +30,7 @@
     "dist",
     "LICENSE",
     "README.md",
+    "HELP.md",
     "package.json"
   ],
   "dependencies": {
