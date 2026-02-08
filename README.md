@@ -94,6 +94,7 @@ watchfix watch --daemon --autonomous
 | `watchfix logs` | Show activity log |
 | `watchfix clean` | Remove old context files |
 | `watchfix config validate` | Validate configuration file |
+| `watchfix manual` | Show detailed reference documentation (for AI agents and advanced users) |
 
 ### Global Options
 
@@ -107,6 +108,8 @@ watchfix watch --daemon --autonomous
 - Windows users should run `watchfix watch` in a terminal window or use a process manager
 
 ## Documentation
+
+Run `watchfix manual` for a detailed CLI reference covering all commands, flags, exit codes, error statuses, JSON output format, and common workflows.
 
 For detailed configuration options and advanced usage, see the [specification document](./spec/watchfix-spec-v8.md).
 
